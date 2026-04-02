@@ -55,7 +55,17 @@ npm run start:dev
 | `DB_PASSWORD` | `postgres` | Database password |
 | `DB_NAME` | `game_prices` | Database name |
 
-> For local development with Docker, see [game-price-infra](https://github.com/jose-padron/game-price-infra).
+## Related Repos
+
+This project is part of a multi-repo setup. All three repos are needed to run the full stack:
+
+| Repo | Description |
+|------|-------------|
+| **game-price-api** (this repo) | Backend API |
+| [game-price-web](https://github.com/padronjosef/game-price-web) | Frontend (Next.js) |
+| [game-price-infra](https://github.com/padronjosef/game-price-infra) | Docker Compose and infrastructure |
+
+> The easiest way to get everything running is via Docker Compose in the [infra repo](https://github.com/padronjosef/game-price-infra). Clone all three repos as siblings and run `docker compose up` from `game-price-infra/`.
 
 ## Project Structure
 
