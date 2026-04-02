@@ -1,4 +1,10 @@
-import { Controller, Get, Query, Res, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Query,
+  Res,
+  BadRequestException,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { SearchService } from './search.service';
 
@@ -19,7 +25,10 @@ export class SearchController {
     }
 
     const pageNum = Math.max(1, parseInt(page || '1', 10) || 1);
-    const limitNum = Math.min(50, Math.max(1, parseInt(limit || '12', 10) || 12));
+    const limitNum = Math.min(
+      50,
+      Math.max(1, parseInt(limit || '12', 10) || 12),
+    );
 
     return this.searchService.search(query.trim(), pageNum, limitNum);
   }
@@ -44,7 +53,10 @@ export class SearchController {
 
     // Fast results first (may come from cache)
     const region = cc || 'us';
-    const { game, prices, steamIndex } = await this.searchService.searchFast(query.trim(), region);
+    const { game, prices, steamIndex } = await this.searchService.searchFast(
+      query.trim(),
+      region,
+    );
 
     if (!steamIndex) {
       // Cache hit — send everything and finish
@@ -55,11 +67,18 @@ export class SearchController {
     }
 
     // Cache miss — scrape slow sources too
-    res.write(`data: ${JSON.stringify({ type: 'pending', scrapers: ['Instant Gaming'] })}\n\n`);
+    res.write(
+      `data: ${JSON.stringify({ type: 'pending', scrapers: ['Instant Gaming'] })}\n\n`,
+    );
     res.write(`data: ${JSON.stringify({ type: 'fast', game, prices })}\n\n`);
 
-    for await (const results of this.searchService.searchSlow(query.trim(), steamIndex)) {
-      res.write(`data: ${JSON.stringify({ type: 'slow', prices: results })}\n\n`);
+    for await (const results of this.searchService.searchSlow(
+      query.trim(),
+      steamIndex,
+    )) {
+      res.write(
+        `data: ${JSON.stringify({ type: 'slow', prices: results })}\n\n`,
+      );
     }
 
     res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);

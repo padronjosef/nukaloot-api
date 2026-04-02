@@ -49,7 +49,10 @@ export class PricesService {
     return prices.length > 0 ? prices : null;
   }
 
-  async savePrices(game: Game, scrapedPrices: ScrapedPrice[]): Promise<Price[]> {
+  async savePrices(
+    game: Game,
+    scrapedPrices: ScrapedPrice[],
+  ): Promise<Price[]> {
     for (const sp of scrapedPrices) {
       let store = await this.storeRepo.findOne({
         where: { name: sp.storeName },
@@ -64,7 +67,7 @@ export class PricesService {
       }
 
       // Upsert: find existing price by game + store + productUrl
-      let existing = await this.priceRepo.findOne({
+      const existing = await this.priceRepo.findOne({
         where: {
           game: { id: game.id },
           store: { id: store.id },

@@ -83,8 +83,10 @@ export class CheapSharkScraper implements GameScraper {
         backgroundUrl: '',
         releaseDate: '',
       }));
-    } catch (error) {
-      this.logger.error(`CheapShark search failed: ${error.message}`);
+    } catch (error: unknown) {
+      this.logger.error(
+        `CheapShark search failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
       return [];
     }
   }

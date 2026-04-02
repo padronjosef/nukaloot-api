@@ -12,8 +12,13 @@ export class InstantGamingScraper implements GameScraper {
     if (!this.browser || !this.browser.isConnected()) {
       this.browser = await chromium.launch({
         headless: true,
-        executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        executablePath:
+          process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+        ],
       });
     }
     return this.browser;
@@ -58,7 +63,11 @@ export class InstantGamingScraper implements GameScraper {
               url: link.getAttribute('href') || '',
               price: priceEl.textContent?.trim() || '',
               discount: discountEl?.textContent?.trim() || '',
-              image: imgEl?.getAttribute('data-src') || imgEl?.dataset?.src || imgEl?.getAttribute('src') || '',
+              image:
+                imgEl?.getAttribute('data-src') ||
+                imgEl?.dataset?.src ||
+                imgEl?.getAttribute('src') ||
+                '',
             });
           });
 
@@ -88,13 +97,16 @@ export class InstantGamingScraper implements GameScraper {
               ? item.url
               : `https://www.instant-gaming.com${item.url}`,
             gameType: 'unknown' as const,
-            imageUrl: item.image && !item.image.includes('lazy.svg') ? item.image : '',
+            imageUrl:
+              item.image && !item.image.includes('lazy.svg') ? item.image : '',
             backgroundUrl: '',
             releaseDate: '',
           };
         });
-    } catch (error) {
-      this.logger.error(`Instant Gaming search failed: ${error.message}`);
+    } catch (error: unknown) {
+      this.logger.error(
+        `Instant Gaming search failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
       return [];
     } finally {
       if (page) await page.close().catch(() => {});

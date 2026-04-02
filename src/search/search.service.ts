@@ -2,8 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ScrapersService, SteamIndex } from '../scrapers/scrapers.service';
 import { GamesService } from '../games/games.service';
 import { PricesService } from '../prices/prices.service';
-import { ScrapedPrice } from '../scrapers/interfaces/scraper.interface';
-
 @Injectable()
 export class SearchService {
   private readonly logger = new Logger(SearchService.name);
@@ -48,7 +46,9 @@ export class SearchService {
 
     const cached = await this.prices.getCachedPrices(game.slug);
     if (cached) {
-      this.logger.log(`Stream cache hit for "${query}" (${cached.length} prices)`);
+      this.logger.log(
+        `Stream cache hit for "${query}" (${cached.length} prices)`,
+      );
       return { game, prices: cached, steamIndex: null };
     }
 

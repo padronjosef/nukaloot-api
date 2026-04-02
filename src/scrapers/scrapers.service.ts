@@ -33,7 +33,16 @@ function inferGameType(name: string): GameType | null {
 }
 
 export interface SteamIndex {
-  map: Map<string, { gameType: GameType; gameName: string; imageUrl: string; backgroundUrl: string; releaseDate: string }>;
+  map: Map<
+    string,
+    {
+      gameType: GameType;
+      gameName: string;
+      imageUrl: string;
+      backgroundUrl: string;
+      releaseDate: string;
+    }
+  >;
 }
 
 @Injectable()
@@ -50,7 +59,10 @@ export class ScrapersService {
    * Fast search: Steam + CheapShark (API-based, <2s)
    * Returns results + steam index for enriching slow results later
    */
-  async searchFast(query: string, cc = 'us'): Promise<{ prices: ScrapedPrice[]; steamIndex: SteamIndex }> {
+  async searchFast(
+    query: string,
+    cc = 'us',
+  ): Promise<{ prices: ScrapedPrice[]; steamIndex: SteamIndex }> {
     this.logger.log(`Fast search for: "${query}" (region: ${cc})`);
 
     const results = await Promise.allSettled([
@@ -87,7 +99,10 @@ export class ScrapersService {
     }
 
     // Enrich CheapShark with Steam data
-    const matchedCheapShark = this.enrichWithSteamData(cheapSharkPrices, steamIndex);
+    const matchedCheapShark = this.enrichWithSteamData(
+      cheapSharkPrices,
+      steamIndex,
+    );
 
     const prices = [...steamPrices, ...matchedCheapShark];
     return { prices: this.deduplicateAndSort(prices), steamIndex };
@@ -97,7 +112,10 @@ export class ScrapersService {
    * Slow search: Playwright-based scrapers (5-15s each)
    * Yields results one by one as they complete
    */
-  async *searchSlow(query: string, steamIndex: SteamIndex): AsyncGenerator<ScrapedPrice[]> {
+  async *searchSlow(
+    query: string,
+    steamIndex: SteamIndex,
+  ): AsyncGenerator<ScrapedPrice[]> {
     const slowScrapers = [
       { name: 'Instant Gaming', scraper: this.instantGaming },
     ];
@@ -110,8 +128,10 @@ export class ScrapersService {
         if (enriched.length > 0) {
           yield enriched;
         }
-      } catch (error) {
-        this.logger.error(`${name} scraper failed: ${error.message}`);
+      } catch (error: unknown) {
+        this.logger.error(
+          `${name} scraper failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
       }
     }
   }
@@ -124,7 +144,10 @@ export class ScrapersService {
     return prices;
   }
 
-  private enrichWithSteamData(prices: ScrapedPrice[], steamIndex: SteamIndex): ScrapedPrice[] {
+  private enrichWithSteamData(
+    prices: ScrapedPrice[],
+    steamIndex: SteamIndex,
+  ): ScrapedPrice[] {
     const matched: ScrapedPrice[] = [];
 
     for (const p of prices) {
@@ -150,10 +173,20 @@ export class ScrapersService {
       // Partial match: find the LONGEST Steam name contained in the IG name
       // This ensures "Dark Souls II Crown of the Sunken King" matches the DLC entry
       // instead of the base game "Dark Souls II"
-      let bestMatch: { steamNorm: string; data: { gameType: GameType; gameName: string; imageUrl: string; backgroundUrl: string; releaseDate: string } } | null = null;
+      let bestMatch: {
+        steamNorm: string;
+        data: {
+          gameType: GameType;
+          gameName: string;
+          imageUrl: string;
+          backgroundUrl: string;
+          releaseDate: string;
+        };
+      } | null = null;
 
       for (const [steamNorm, steamData] of steamIndex.map) {
-        const isContained = normalized.includes(steamNorm) || steamNorm.includes(normalized);
+        const isContained =
+          normalized.includes(steamNorm) || steamNorm.includes(normalized);
         if (isContained) {
           if (!bestMatch || steamNorm.length > bestMatch.steamNorm.length) {
             bestMatch = { steamNorm, data: steamData };
@@ -165,7 +198,8 @@ export class ScrapersService {
         p.gameType = bestMatch.data.gameType;
         p.gameName = bestMatch.data.gameName;
         if (bestMatch.data.imageUrl) p.imageUrl = bestMatch.data.imageUrl;
-        if (bestMatch.data.backgroundUrl) p.backgroundUrl = bestMatch.data.backgroundUrl;
+        if (bestMatch.data.backgroundUrl)
+          p.backgroundUrl = bestMatch.data.backgroundUrl;
         p.releaseDate = bestMatch.data.releaseDate;
       }
       matched.push(p);
