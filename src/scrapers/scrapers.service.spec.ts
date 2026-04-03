@@ -55,9 +55,9 @@ describe('ScrapersService', () => {
       expect(cheapSharkScraper.search).toHaveBeenCalledWith('dark souls');
     });
 
-    it('should pass cc to Steam scraper', async () => {
+    it('should always pass us to Steam scraper regardless of cc', async () => {
       await service.searchFast('dark souls', 'gb');
-      expect(steamScraper.search).toHaveBeenCalledWith('dark souls', 'gb');
+      expect(steamScraper.search).toHaveBeenCalledWith('dark souls', 'us');
     });
 
     it('should default cc to "us"', async () => {
