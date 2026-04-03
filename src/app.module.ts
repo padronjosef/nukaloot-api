@@ -23,6 +23,7 @@ import { Game, Store, Price } from './entities';
         database: config.get('DB_NAME', 'game_prices'),
         entities: [Game, Store, Price],
         synchronize: true, // dev only — use migrations in prod
+        ssl: config.get('DB_SSL') === 'true' ? { rejectUnauthorized: false } : false,
       }),
     }),
     HttpModule,
