@@ -52,6 +52,10 @@ export class GamesService {
     });
   }
 
+  async updateFailedStores(gameId: string, errors: { store: string; reason: string }[]) {
+    await this.gameRepo.update(gameId, { failedStores: errors });
+  }
+
   private slugify(text: string): string {
     return text
       .toLowerCase()

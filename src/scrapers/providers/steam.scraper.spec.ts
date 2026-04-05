@@ -301,7 +301,7 @@ describe('SteamScraper', () => {
         );
 
       const result = await scraper.search('x');
-      expect(result[0].gameType).toBe('unknown');
+      expect(result[0].gameType).toBe('other');
     });
 
     it('should default to gameType "unknown" when type is missing', async () => {
@@ -323,7 +323,7 @@ describe('SteamScraper', () => {
         );
 
       const result = await scraper.search('x');
-      expect(result[0].gameType).toBe('unknown');
+      expect(result[0].gameType).toBe('other');
     });
 
     it('should skip items without price_overview', async () => {

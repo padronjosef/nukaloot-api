@@ -1,4 +1,4 @@
-export type GameType = 'game' | 'dlc' | 'bundle' | 'unknown';
+export type GameType = 'game' | 'dlc' | 'bundle' | 'other';
 
 export interface ScrapedPrice {
   storeName: string;

@@ -53,12 +53,21 @@ export class SearchService {
     }
 
     this.logger.log(`Stream cache miss for "${query}", scraping...`);
-    const { prices, steamIndex } = await this.scrapers.searchFast(query, cc);
+    const { prices, steamIndex, errors } = await this.scrapers.searchFast(query, cc);
     const savedPrices = await this.prices.savePrices(game, prices);
-    return { game, prices: savedPrices, steamIndex };
+    return { game, prices: savedPrices, steamIndex, errors };
   }
 
   searchSlow(query: string, steamIndex: SteamIndex) {
     return this.scrapers.searchSlow(query, steamIndex);
+  }
+
+  async savePrices(game: { id: string; name: string; slug: string }, scrapedPrices: import('../scrapers/interfaces/scraper.interface').ScrapedPrice[]) {
+    const gameEntity = await this.games.findOrCreate(game.name);
+    return this.prices.savePrices(gameEntity, scrapedPrices);
+  }
+
+  async saveFailedStores(gameId: string, errors: { store: string; reason: string }[]) {
+    await this.games.updateFailedStores(gameId, errors);
   }
 }

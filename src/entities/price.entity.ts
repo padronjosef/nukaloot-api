@@ -28,7 +28,7 @@ export class Price {
   @Column()
   gameName: string;
 
-  @Column({ default: 'unknown' })
+  @Column({ default: 'other' })
   gameType: string;
 
   @Column({ default: '' })

@@ -71,7 +71,7 @@ export class SteamScraper implements GameScraper {
           const priceData = appData.price_overview;
           const steamType = appData.type?.toLowerCase() || '';
 
-          let gameType: GameType = 'unknown';
+          let gameType: GameType = 'other';
           if (steamType === 'game') gameType = 'game';
           else if (steamType === 'dlc') gameType = 'dlc';
           else if (steamType === 'bundle' || steamType === 'sub')

@@ -74,7 +74,7 @@ describe('CheapSharkScraper', () => {
         originalPrice: 19.99,
         currency: 'USD',
         productUrl: 'https://www.cheapshark.com/redirect?dealID=abc123',
-        gameType: 'unknown',
+        gameType: 'other',
         imageUrl:
           'https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/570/header.jpg',
         backgroundUrl: '',
@@ -186,7 +186,7 @@ describe('CheapSharkScraper', () => {
     it('should always set gameType to "unknown"', async () => {
       httpService.get.mockReturnValue(of(axiosResponse([makeDeal()])));
       const result = await scraper.search('test');
-      expect(result[0].gameType).toBe('unknown');
+      expect(result[0].gameType).toBe('other');
     });
 
     it('should always set currency to "USD"', async () => {

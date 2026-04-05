@@ -2,6 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { SteamScraper } from './providers/steam.scraper';
 import { CheapSharkScraper } from './providers/cheapshark.scraper';
 import { InstantGamingScraper } from './providers/instantgaming.scraper';
+import { EnebaScraper } from './providers/eneba.scraper';
+import { G2AScraper } from './providers/g2a.scraper';
+import { CDKeysScraper } from './providers/cdkeys.scraper';
+import { KinguinScraper } from './providers/kinguin.scraper';
 import { GameType, ScrapedPrice } from './interfaces/scraper.interface';
 import { standardizeName } from '../games/games.service';
 
@@ -53,6 +57,10 @@ export class ScrapersService {
     private readonly steam: SteamScraper,
     private readonly cheapShark: CheapSharkScraper,
     private readonly instantGaming: InstantGamingScraper,
+    private readonly eneba: EnebaScraper,
+    private readonly g2a: G2AScraper,
+    private readonly cdkeys: CDKeysScraper,
+    private readonly kinguin: KinguinScraper,
   ) {}
 
   /**
@@ -62,8 +70,14 @@ export class ScrapersService {
   async searchFast(
     query: string,
     cc = 'us',
-  ): Promise<{ prices: ScrapedPrice[]; steamIndex: SteamIndex }> {
+  ): Promise<{
+    prices: ScrapedPrice[];
+    steamIndex: SteamIndex;
+    errors: { store: string; reason: string }[];
+  }> {
     this.logger.log(`Fast search for: "${query}" (region: ${cc})`);
+
+    const errors: { store: string; reason: string }[] = [];
 
     // Always fetch Steam prices in USD for consistent base currency
     const results = await Promise.allSettled([
@@ -76,14 +90,29 @@ export class ScrapersService {
 
     if (results[0].status === 'fulfilled') {
       steamPrices = results[0].value;
+      if (steamPrices.length === 0) {
+        errors.push({ store: 'Steam', reason: 'No results found' });
+      }
     } else {
-      this.logger.warn(`Steam scraper failed: ${results[0].reason}`);
+      const reason = results[0].reason instanceof Error ? results[0].reason.message : 'Unknown error';
+      this.logger.warn(`Steam scraper failed: ${reason}`);
+      errors.push({ store: 'Steam', reason });
     }
 
     if (results[1].status === 'fulfilled') {
       cheapSharkPrices = results[1].value;
     } else {
-      this.logger.warn(`CheapShark scraper failed: ${results[1].reason}`);
+      const reason = results[1].reason instanceof Error ? results[1].reason.message : 'Unknown error';
+      this.logger.warn(`CheapShark scraper failed: ${reason}`);
+      // CheapShark covers multiple stores — mark them all
+      const cheapSharkStores = [...new Set(cheapSharkPrices.map((p) => p.storeName))];
+      if (cheapSharkStores.length === 0) {
+        errors.push({ store: 'CheapShark', reason });
+      } else {
+        for (const s of cheapSharkStores) {
+          errors.push({ store: s, reason });
+        }
+      }
     }
 
     // Build Steam index (source of truth)
@@ -106,7 +135,7 @@ export class ScrapersService {
     );
 
     const prices = [...steamPrices, ...matchedCheapShark];
-    return { prices: this.deduplicateAndSort(prices), steamIndex };
+    return { prices: this.deduplicateAndSort(prices), steamIndex, errors };
   }
 
   /**
@@ -116,23 +145,88 @@ export class ScrapersService {
   async *searchSlow(
     query: string,
     steamIndex: SteamIndex,
-  ): AsyncGenerator<ScrapedPrice[]> {
+  ): AsyncGenerator<
+    | { type: 'results'; prices: ScrapedPrice[] }
+    | { type: 'error'; store: string; reason: string }
+    | { type: 'scraping-start'; store: string }
+    | { type: 'scraping-end'; store: string }
+  > {
     const slowScrapers = [
       { name: 'Instant Gaming', scraper: this.instantGaming },
+      { name: 'Eneba', scraper: this.eneba },
+      { name: 'G2A', scraper: this.g2a },
+      { name: 'CDKeys', scraper: this.cdkeys },
+      { name: 'Kinguin', scraper: this.kinguin },
     ];
 
+    type SlowEvent =
+      | { type: 'results'; prices: ScrapedPrice[] }
+      | { type: 'error'; store: string; reason: string }
+      | { type: 'scraping-start'; store: string }
+      | { type: 'scraping-end'; store: string };
+
+    const eventQueue: SlowEvent[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    let resolve: (value?: unknown) => void = () => {};
+    let hasWaiter = false;
+
+    const push = (event: SlowEvent) => {
+      eventQueue.push(event);
+      if (hasWaiter) {
+        hasWaiter = false;
+        resolve();
+      }
+    };
+
+    let running = slowScrapers.length;
+
     for (const { name, scraper } of slowScrapers) {
-      try {
-        this.logger.log(`Slow scraping: ${name}...`);
-        const results = await scraper.search(query);
-        const enriched = this.enrichWithSteamData(results, steamIndex);
-        if (enriched.length > 0) {
-          yield enriched;
+      push({ type: 'scraping-start', store: name });
+
+      (async () => {
+        try {
+          this.logger.log(`Slow scraping: ${name}...`);
+          const results = await scraper.search(query);
+          push({ type: 'scraping-end', store: name });
+          if (results.length === 0) {
+            push({ type: 'error', store: name, reason: 'No results found' });
+          } else {
+            const enriched = this.enrichWithSteamData(results, steamIndex);
+            if (enriched.length > 0) {
+              push({ type: 'results', prices: enriched });
+            }
+          }
+        } catch (error: unknown) {
+          push({ type: 'scraping-end', store: name });
+          const reason =
+            error instanceof Error ? error.message : 'Unknown error';
+          this.logger.error(`${name} scraper failed: ${reason}`);
+          push({
+            type: 'error',
+            store: name,
+            reason: reason.includes('Timeout')
+              ? 'Blocked or timeout'
+              : reason,
+          });
+        } finally {
+          running--;
+          if (hasWaiter) {
+            hasWaiter = false;
+            resolve();
+          }
         }
-      } catch (error: unknown) {
-        this.logger.error(
-          `${name} scraper failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        );
+      })();
+    }
+
+    while (running > 0 || eventQueue.length > 0) {
+      if (eventQueue.length === 0) {
+        await new Promise<void>((r) => {
+          resolve = r;
+          hasWaiter = true;
+        });
+      }
+      while (eventQueue.length > 0) {
+        yield eventQueue.shift()!;
       }
     }
   }
@@ -152,7 +246,7 @@ export class ScrapersService {
     const matched: ScrapedPrice[] = [];
 
     for (const p of prices) {
-      if (p.gameType !== 'unknown') {
+      if (p.gameType !== 'other') {
         matched.push(p);
         continue;
       }
@@ -207,7 +301,7 @@ export class ScrapersService {
     }
 
     for (const p of matched) {
-      if (p.gameType === 'unknown' || p.gameType === 'game') {
+      if (p.gameType === 'other' || p.gameType === 'game') {
         const inferred = inferGameType(p.gameName);
         if (inferred) p.gameType = inferred;
       }

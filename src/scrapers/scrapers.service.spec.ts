@@ -13,7 +13,7 @@ function makePrice(overrides: Partial<ScrapedPrice> = {}): ScrapedPrice {
     originalPrice: undefined,
     currency: 'USD',
     productUrl: 'https://test.com/game',
-    gameType: 'unknown',
+    gameType: 'other',
     imageUrl: '',
     backgroundUrl: '',
     releaseDate: '',
@@ -238,7 +238,7 @@ describe('ScrapersService', () => {
           storeName: 'Instant Gaming',
           gameName: 'Dark Souls Iii',
           price: 5,
-          gameType: 'unknown',
+          gameType: 'other',
         }),
       ]);
 
@@ -286,7 +286,7 @@ describe('ScrapersService', () => {
           storeName: 'GOG',
           gameName: 'Hades',
           price: 19.99,
-          gameType: 'unknown',
+          gameType: 'other',
           imageUrl: '',
           backgroundUrl: '',
           releaseDate: '',
@@ -319,7 +319,7 @@ describe('ScrapersService', () => {
           storeName: 'Fanatical',
           gameName: 'Dark Souls II Crown Of The Sunken King',
           price: 9.99,
-          gameType: 'unknown',
+          gameType: 'other',
           imageUrl: '',
         }),
       ]);
@@ -357,7 +357,7 @@ describe('ScrapersService', () => {
           storeName: 'GOG',
           gameName: 'Dark Souls II Scholar Of The First Sin',
           price: 29.99,
-          gameType: 'unknown',
+          gameType: 'other',
           imageUrl: '',
         }),
       ]);
@@ -403,7 +403,7 @@ describe('ScrapersService', () => {
           storeName: 'GOG',
           gameName: 'Hades Complete Edition',
           price: 29.99,
-          gameType: 'unknown',
+          gameType: 'other',
         }),
       ]);
 
@@ -438,7 +438,7 @@ describe('ScrapersService', () => {
             storeName: 'GOG',
             gameName: `Test ${kw}`,
             price: 10,
-            gameType: 'unknown',
+            gameType: 'other',
           }),
         ]);
 
@@ -467,7 +467,7 @@ describe('ScrapersService', () => {
       ]);
 
       const { prices } = await service.searchFast('hades');
-      // enrichWithSteamData runs inferGameType on items with 'game' or 'unknown'
+      // enrichWithSteamData runs inferGameType on items with 'game' or 'other'
       const gog = prices.find((p) => p.storeName === 'GOG');
       expect(gog).toBeDefined();
       expect(gog!.gameType).toBe('bundle');

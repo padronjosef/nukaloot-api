@@ -22,6 +22,9 @@ export class Game {
   @Column({ nullable: true })
   coverUrl: string;
 
+  @Column({ type: 'jsonb', default: '[]' })
+  failedStores: { store: string; reason: string }[];
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -23,9 +23,15 @@ interface SteamFeaturedResponse {
   featured_win?: FeaturedGame[];
 }
 
+interface SteamTopSeller extends FeaturedGame {
+  final_price: number;
+  discount_percent: number;
+}
+
 interface SteamFeaturedCategoriesResponse {
   coming_soon?: { items?: FeaturedGame[] };
   new_releases?: { items?: FeaturedGame[] };
+  top_sellers?: { items?: SteamTopSeller[] };
 }
 
 interface AxiosErrorLike {
@@ -112,7 +118,7 @@ export class GamesController {
   @Get('featured')
   async featured() {
     const cached = getCached<{
-      items: { name: string; appId: number; image: string }[];
+      items: { name: string; appId: number; image: string; finalPrice?: number; discountPercent?: number }[];
       rateLimited?: boolean;
     }>('featured');
     if (cached) return cached;
@@ -138,17 +144,26 @@ export class GamesController {
     }
 
     const seen = new Set<number>();
-    const candidates: { name: string; appId: number; image: string }[] = [];
+    const candidates: {
+      name: string;
+      appId: number;
+      image: string;
+      finalPrice?: number;
+      discountPercent?: number;
+    }[] = [];
     for (const fg of [
       ...(data.large_capsules || []),
       ...(data.featured_win || []),
     ]) {
       if (!fg.name || !fg.id || seen.has(fg.id)) continue;
       seen.add(fg.id);
+      const seller = fg as unknown as SteamTopSeller;
       candidates.push({
         name: standardizeName(fg.name),
         appId: fg.id,
         image: fg.header_image,
+        finalPrice: seller.final_price ? seller.final_price / 100 : undefined,
+        discountPercent: seller.discount_percent || undefined,
       });
     }
 
@@ -158,12 +173,12 @@ export class GamesController {
     return result;
   }
 
-  @Get('upcoming')
-  async upcoming() {
+  @Get('top-sellers')
+  async topSellers() {
     const cached = getCached<{
       items: { name: string; appId: number; image: string; url: string }[];
       rateLimited?: boolean;
-    }>('upcoming');
+    }>('top-sellers');
     if (cached) return cached;
 
     let data: SteamFeaturedCategoriesResponse;
@@ -184,8 +199,7 @@ export class GamesController {
       return { items: [] };
     }
 
-    const comingSoon = data?.coming_soon?.items || [];
-    const newReleases = data?.new_releases?.items || [];
+    const topSellers = data?.top_sellers?.items || [];
     const seen = new Set<number>();
 
     const candidates: {
@@ -194,8 +208,8 @@ export class GamesController {
       image: string;
       url: string;
     }[] = [];
-    for (const item of [...comingSoon, ...newReleases]) {
-      if (seen.has(item.id)) continue;
+    for (const item of topSellers) {
+      if (seen.has(item.id) || item.final_price === 0) continue;
       seen.add(item.id);
       candidates.push({
         name: standardizeName(item.name),
@@ -207,7 +221,7 @@ export class GamesController {
 
     const filtered = await filterNsfw(this.http, candidates);
     const result = { items: filtered.slice(0, 12) };
-    setCache('upcoming', result);
+    setCache('top-sellers', result);
     return result;
   }
 }

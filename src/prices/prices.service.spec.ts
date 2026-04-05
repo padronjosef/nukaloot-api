@@ -242,7 +242,7 @@ describe('PricesService', () => {
         currency: 'USD',
         productUrl: 'https://store.steampowered.com/app/570',
         gameName: 'Dark Souls Old',
-        gameType: 'unknown',
+        gameType: 'other',
         imageUrl: 'old.jpg',
         backgroundUrl: 'old-bg.jpg',
         releaseDate: '',

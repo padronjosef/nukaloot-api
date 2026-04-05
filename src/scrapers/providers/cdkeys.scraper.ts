@@ -3,9 +3,9 @@ import { chromium, type Browser } from 'playwright';
 import { GameScraper, ScrapedPrice } from '../interfaces/scraper.interface';
 
 @Injectable()
-export class InstantGamingScraper implements GameScraper {
-  readonly storeName = 'Instant Gaming';
-  private readonly logger = new Logger(InstantGamingScraper.name);
+export class CDKeysScraper implements GameScraper {
+  readonly storeName = 'CDKeys';
+  private readonly logger = new Logger(CDKeysScraper.name);
   private browser: Browser | null = null;
 
   private async getBrowser(): Promise<Browser> {
@@ -34,13 +34,24 @@ export class InstantGamingScraper implements GameScraper {
       });
       page = await context.newPage();
 
-      await page.goto(
-        `https://www.instant-gaming.com/en/search/?q=${encodeURIComponent(query)}`,
+      // CDKeys may have redirected to loaded.com — try loading and gracefully
+      // return empty results if the site is unreachable or changed.
+      const response = await page.goto(
+        `https://www.cdkeys.com/catalogsearch/result/?q=${encodeURIComponent(query)}`,
         { waitUntil: 'domcontentloaded', timeout: 30000 },
-      );
+      ).catch(() => null);
+
+      if (!response || response.status() >= 400) {
+        this.logger.warn('CDKeys appears unreachable or returned an error');
+        await context.close();
+        return [];
+      }
+
       await page.waitForTimeout(3000);
       await page
-        .waitForSelector('.search.listing-items .item', { timeout: 10000 })
+        .waitForSelector('.product-item, .product-item-info', {
+          timeout: 10000,
+        })
         .catch(() => {});
 
       const items = await page.evaluate(() => {
@@ -48,30 +59,29 @@ export class InstantGamingScraper implements GameScraper {
           title: string;
           url: string;
           price: string;
-          discount: string;
           image: string;
         }[] = [];
 
         document
-          .querySelectorAll('.search.listing-items .item')
+          .querySelectorAll('.product-item, .product-item-info, li.item.product')
           .forEach((el) => {
-            const link = el.querySelector('a.cover') as HTMLAnchorElement;
-            const priceEl = el.querySelector('.price');
-            const discountEl = el.querySelector('.discount');
+            const link = el.querySelector('a.product-item-link, a.product-item-photo') as HTMLAnchorElement;
+            const titleEl = el.querySelector('.product-item-link, .product-name');
+            const priceEl = el.querySelector('.price, .special-price .price, [data-price-amount]');
             const imgEl = el.querySelector('img') as HTMLImageElement;
 
             if (!link || !priceEl) return;
 
+            const title = titleEl?.textContent?.trim() || '';
+            const url = link.getAttribute('href') || '';
+
+            if (!title) return;
+
             results.push({
-              title: link.getAttribute('title') || '',
-              url: link.getAttribute('href') || '',
+              title,
+              url,
               price: priceEl.textContent?.trim() || '',
-              discount: discountEl?.textContent?.trim() || '',
-              image:
-                imgEl?.getAttribute('data-src') ||
-                imgEl?.dataset?.src ||
-                imgEl?.getAttribute('src') ||
-                '',
+              image: imgEl?.getAttribute('src') || '',
             });
           });
 
@@ -84,7 +94,6 @@ export class InstantGamingScraper implements GameScraper {
         .filter((item) => item.price && item.title)
         .slice(0, 60)
         .map((item) => {
-          // Parse price: "31.99 €" → 31.99
           const priceMatch = item.price.match(/([\d.,]+)/);
           const price = priceMatch
             ? parseFloat(priceMatch[1].replace(',', '.'))
@@ -92,24 +101,23 @@ export class InstantGamingScraper implements GameScraper {
 
           return {
             storeName: this.storeName,
-            storeUrl: 'https://www.instant-gaming.com',
-            gameName: item.title.replace(/\s*-\s*Latin America$/i, '').trim(),
+            storeUrl: 'https://www.cdkeys.com',
+            gameName: item.title,
             price,
             originalPrice: undefined,
             currency: 'EUR',
             productUrl: item.url.startsWith('http')
               ? item.url
-              : `https://www.instant-gaming.com${item.url}`,
+              : `https://www.cdkeys.com${item.url}`,
             gameType: 'other' as const,
-            imageUrl:
-              item.image && !item.image.includes('lazy.svg') ? item.image : '',
+            imageUrl: item.image || '',
             backgroundUrl: '',
             releaseDate: '',
           };
         });
     } catch (error: unknown) {
       this.logger.error(
-        `Instant Gaming search failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `CDKeys search failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
       return [];
     } finally {
