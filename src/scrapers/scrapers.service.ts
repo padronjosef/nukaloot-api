@@ -13,6 +13,70 @@ function normalize(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+const REGION_TOKENS = new Set([
+  // Regions
+  'global', 'worldwide', 'ww',
+  'europe', 'eu', 'emea',
+  'north america', 'na', 'united states', 'us', 'usa',
+  'latam', 'latin america', 'south america', 'sa',
+  'asia', 'apac', 'sea',
+  'row', 'rest of world',
+  'middle east', 'africa', 'mena',
+  'turkey', 'argentina', 'brazil', 'india', 'russia', 'ru', 'cis', 'ru/cis',
+  'uk', 'australia', 'anz', 'japan', 'jp', 'china', 'cn', 'korea', 'kr',
+  'germany', 'france', 'italy', 'spain',
+  // Platform/format noise
+  'pc', 'steam', 'cd key', 'cdkey', 'key', 'steam key',
+  'xbox live', 'xbox one', 'xbox series x|s', 'xbox series x/s',
+  'windows', 'playstation', 'ps4', 'ps5', 'nintendo switch',
+  'v2', 'v1',
+]);
+
+/** Strip region / platform / format tokens to produce a dedup key */
+function dedupeNormalize(name: string): string {
+  let lower = name.toLowerCase();
+  // Remove only parenthesized platform/region noise like (Pc), (Xbox One), not game-meaningful content
+  lower = lower.replace(/\((?:pc|xbox[^)]*|ps[45]|windows|nintendo switch)\)/gi, '');
+  // Remove known tokens (longest first to avoid partial matches)
+  const sorted = [...REGION_TOKENS].sort((a, b) => b.length - a.length);
+  for (const token of sorted) {
+    // Word-boundary aware replacement
+    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    lower = lower.replace(new RegExp(`\\b${escaped}\\b`, 'gi'), '');
+  }
+  return lower.replace(/[^a-z0-9]/g, '');
+}
+
+/** Returns true if the listing is for a non-PC platform (Xbox, PlayStation, Nintendo) */
+function isConsoleListing(name: string): boolean {
+  const lower = name.toLowerCase();
+  const consolePatterns = [
+    /\bxbox\b/,
+    /\bplaystation\b/,
+    /\bps[45]\b/,
+    /\bnintendo\b/,
+    /\bswitch\b/,
+    /\bxbox live\b/,
+    /\bxbox one\b/,
+    /\bxbox series\b/,
+  ];
+  const pcPatterns = [
+    /\bsteam\b/,
+    /\bpc\b/,
+    /\bgog\b/,
+    /\bepic\b/,
+    /\buplay\b/,
+    /\bubisoft\b/,
+    /\borigin\b/,
+    /\bea app\b/,
+    /\bwindows\b/,
+  ];
+  const isConsole = consolePatterns.some((p) => p.test(lower));
+  const isPC = pcPatterns.some((p) => p.test(lower));
+  // If it mentions a console but NOT PC, filter it out
+  return isConsole && !isPC;
+}
+
 const BUNDLE_KEYWORDS = [
   'bundle',
   'pack',
@@ -314,7 +378,9 @@ export class ScrapersService {
     const bestByStore = new Map<string, ScrapedPrice>();
     for (const p of prices) {
       p.gameName = standardizeName(p.gameName);
-      const key = `${p.storeName}:${normalize(p.gameName)}`;
+      // Skip console-only listings
+      if (isConsoleListing(p.gameName)) continue;
+      const key = `${p.storeName}:${dedupeNormalize(p.gameName)}`;
       const existing = bestByStore.get(key);
       if (!existing || p.price < existing.price) {
         bestByStore.set(key, p);
