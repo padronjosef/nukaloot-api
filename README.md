@@ -16,6 +16,10 @@ Internal-only service, not exposed to the internet. Only the Next.js frontend ca
 Scrapers:
 - **Steam** -- official API via Axios
 - **CheapShark** -- aggregates 20+ stores (GOG, Humble, Fanatical, GreenManGaming, Epic, etc.)
+- **Eneba** -- Algolia API
+- **G2A** -- REST API
+- **Kinguin** -- REST API
+- **CDKeys** -- browser-based scraping via Playwright
 - **Instant Gaming** -- browser-based scraping via Playwright
 
 Results are cached in PostgreSQL with a daily cache boundary at 1:00 PM COT. Stale results are re-scraped on demand.
@@ -76,7 +80,7 @@ src/
   games/             # Games module (featured, upcoming, search)
   prices/            # Price caching and persistence
   scrapers/
-    providers/       # Steam, CheapShark, InstantGaming
+    providers/       # Steam, CheapShark, Eneba, G2A, Kinguin, CDKeys, InstantGaming
     interfaces/      # Shared scraper interfaces
   search/            # Search orchestration and SSE streaming
   stores/            # Store definitions
