@@ -6,7 +6,7 @@ import { CheapSharkScraper } from './providers/cheapshark.scraper';
 import { InstantGamingScraper } from './providers/instantgaming.scraper';
 import { EnebaScraper } from './providers/eneba.scraper';
 import { G2AScraper } from './providers/g2a.scraper';
-import { CDKeysScraper } from './providers/cdkeys.scraper';
+import { LoadedScraper } from './providers/loaded.scraper';
 import { KinguinScraper } from './providers/kinguin.scraper';
 
 @Module({
@@ -18,7 +18,7 @@ import { KinguinScraper } from './providers/kinguin.scraper';
     InstantGamingScraper,
     EnebaScraper,
     G2AScraper,
-    CDKeysScraper,
+    LoadedScraper,
     KinguinScraper,
   ],
   exports: [ScrapersService],

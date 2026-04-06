@@ -11,6 +11,7 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,27 +25,6 @@ jobs:
 
       - name: Bump version
         run: bash scripts/bump-version.sh
-
-      - name: Push version bump
-        if: env.BUMPED == 'true'
-        run: git push --force-with-lease
-
-      - name: Create GitHub Release
-        if: env.BUMPED == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PREV_TAG=$(git tag --sort=-v:refname | head -1)
-          if [ -n "$PREV_TAG" ]; then
-            CHANGELOG=$(git log "$PREV_TAG"..HEAD --oneline --no-merges)
-          else
-            CHANGELOG=$(git log --oneline --no-merges -20)
-          fi
-          git tag "v$NEW_VERSION"
-          git push origin "v$NEW_VERSION"
-          gh release create "v$NEW_VERSION" \
-            --title "v$NEW_VERSION" \
-            --notes "$CHANGELOG"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -73,3 +53,24 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: /opt/nukaloot/nukaloot-infra/terraform/scripts/deploy.sh api
+
+      - name: Push version bump
+        if: env.BUMPED == 'true'
+        run: git push --force-with-lease
+
+      - name: Create GitHub Release
+        if: env.BUMPED == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PREV_TAG=$(git tag --sort=-v:refname | head -1)
+          if [ -n "$PREV_TAG" ]; then
+            CHANGELOG=$(git log "$PREV_TAG"..HEAD --oneline --no-merges)
+          else
+            CHANGELOG=$(git log --oneline --no-merges -20)
+          fi
+          git tag "v$NEW_VERSION"
+          git push origin "v$NEW_VERSION"
+          gh release create "v$NEW_VERSION" \
+            --title "v$NEW_VERSION" \
+            --notes "$CHANGELOG"

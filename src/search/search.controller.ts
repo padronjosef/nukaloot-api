@@ -85,7 +85,7 @@ export class SearchController {
     const allErrors: { store: string; reason: string }[] = [...(errors || [])];
 
     res.write(
-      `data: ${JSON.stringify({ type: 'pending', scrapers: ['Instant Gaming', 'Eneba', 'G2A', 'CDKeys', 'Kinguin'] })}\n\n`,
+      `data: ${JSON.stringify({ type: 'pending', scrapers: ['Instant Gaming', 'Eneba', 'G2A', 'Loaded'] })}\n\n`,
     );
     res.write(`data: ${JSON.stringify({ type: 'fast', game, prices })}\n\n`);
 

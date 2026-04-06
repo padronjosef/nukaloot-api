@@ -4,7 +4,7 @@ import { CheapSharkScraper } from './providers/cheapshark.scraper';
 import { InstantGamingScraper } from './providers/instantgaming.scraper';
 import { EnebaScraper } from './providers/eneba.scraper';
 import { G2AScraper } from './providers/g2a.scraper';
-import { CDKeysScraper } from './providers/cdkeys.scraper';
+import { LoadedScraper } from './providers/loaded.scraper';
 import { KinguinScraper } from './providers/kinguin.scraper';
 import { ScrapedPrice } from './interfaces/scraper.interface';
 
@@ -32,7 +32,7 @@ describe('ScrapersService', () => {
   let instantGamingScraper: { search: jest.Mock; storeName: string };
   let enebaScraper: { search: jest.Mock; storeName: string };
   let g2aScraper: { search: jest.Mock; storeName: string };
-  let cdkeysScraper: { search: jest.Mock; storeName: string };
+  let loadedScraper: { search: jest.Mock; storeName: string };
   let kinguinScraper: { search: jest.Mock; storeName: string };
 
   beforeEach(() => {
@@ -56,9 +56,9 @@ describe('ScrapersService', () => {
       search: jest.fn().mockResolvedValue([]),
       storeName: 'G2A',
     };
-    cdkeysScraper = {
+    loadedScraper = {
       search: jest.fn().mockResolvedValue([]),
-      storeName: 'CDKeys',
+      storeName: 'Loaded',
     };
     kinguinScraper = {
       search: jest.fn().mockResolvedValue([]),
@@ -71,7 +71,7 @@ describe('ScrapersService', () => {
       instantGamingScraper as unknown as InstantGamingScraper,
       enebaScraper as unknown as EnebaScraper,
       g2aScraper as unknown as G2AScraper,
-      cdkeysScraper as unknown as CDKeysScraper,
+      loadedScraper as unknown as LoadedScraper,
       kinguinScraper as unknown as KinguinScraper,
     );
   });

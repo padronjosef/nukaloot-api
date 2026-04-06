@@ -8,8 +8,10 @@ import { PricesModule } from './prices/prices.module';
 import { SearchModule } from './search/search.module';
 import { ScrapersModule } from './scrapers/scrapers.module';
 import { Game, Store, Price } from './entities';
+import { AppController } from './app.controller';
 
 @Module({
+  controllers: [AppController],
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({

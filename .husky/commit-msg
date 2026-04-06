@@ -1,0 +1,7 @@
+commit_msg=$(cat "$1")
+
+if ! echo "$commit_msg" | grep -qE '^\[(major|minor|patch)\] '; then
+  echo "ERROR: Commit message must start with [major], [minor], or [patch]"
+  echo "Example: [patch] Fix button overflow on mobile"
+  exit 1
+fi

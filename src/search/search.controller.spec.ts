@@ -364,8 +364,7 @@ describe('SearchController', () => {
         'Instant Gaming',
         'Eneba',
         'G2A',
-        'CDKeys',
-        'Kinguin',
+        'Loaded',
       ]);
 
       const fastEvent = JSON.parse(

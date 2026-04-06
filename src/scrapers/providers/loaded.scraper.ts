@@ -3,9 +3,9 @@ import { chromium, type Browser } from 'playwright';
 import { GameScraper, ScrapedPrice } from '../interfaces/scraper.interface';
 
 @Injectable()
-export class CDKeysScraper implements GameScraper {
-  readonly storeName = 'CDKeys';
-  private readonly logger = new Logger(CDKeysScraper.name);
+export class LoadedScraper implements GameScraper {
+  readonly storeName = 'Loaded';
+  private readonly logger = new Logger(LoadedScraper.name);
   private browser: Browser | null = null;
 
   private async getBrowser(): Promise<Browser> {
@@ -34,17 +34,15 @@ export class CDKeysScraper implements GameScraper {
       });
       page = await context.newPage();
 
-      // CDKeys may have redirected to loaded.com — try loading and gracefully
-      // return empty results if the site is unreachable or changed.
       const response = await page
         .goto(
-          `https://www.cdkeys.com/catalogsearch/result/?q=${encodeURIComponent(query)}`,
+          `https://www.loaded.com/catalogsearch/result/?q=${encodeURIComponent(query)}`,
           { waitUntil: 'domcontentloaded', timeout: 30000 },
         )
         .catch(() => null);
 
       if (!response || response.status() >= 400) {
-        this.logger.warn('CDKeys appears unreachable or returned an error');
+        this.logger.warn('Loaded appears unreachable or returned an error');
         await context.close();
         return [];
       }
@@ -111,14 +109,14 @@ export class CDKeysScraper implements GameScraper {
 
           return {
             storeName: this.storeName,
-            storeUrl: 'https://www.cdkeys.com',
+            storeUrl: 'https://www.loaded.com',
             gameName: item.title,
             price,
             originalPrice: undefined,
             currency: 'EUR',
             productUrl: item.url.startsWith('http')
               ? item.url
-              : `https://www.cdkeys.com${item.url}`,
+              : `https://www.loaded.com${item.url}`,
             gameType: 'other' as const,
             imageUrl: item.image || '',
             backgroundUrl: '',
@@ -127,7 +125,7 @@ export class CDKeysScraper implements GameScraper {
         });
     } catch (error: unknown) {
       this.logger.error(
-        `CDKeys search failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Loaded search failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
       return [];
     } finally {

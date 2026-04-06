@@ -53,14 +53,25 @@ export class KinguinScraper implements GameScraper {
       const data = (await res.json()) as KinguinResponse;
       const products: KinguinProduct[] = data?._embedded?.products || [];
 
+      const EXCLUDED_TYPES = new Set([
+        'game_account',
+        'ingame_account',
+        'ingame_currency',
+        'ingame_item',
+        'altergift',
+      ]);
+
       return products
-        .filter(
-          (p) =>
+        .filter((p) => {
+          const mpt = (p.attributes?.marketingProductType || '').toLowerCase();
+          return (
             p.active !== false &&
             p.visible !== false &&
             p.price?.lowestOffer &&
-            p.price.lowestOffer > 0,
-        )
+            p.price.lowestOffer > 0 &&
+            !EXCLUDED_TYPES.has(mpt)
+          );
+        })
         .map((p) => {
           const price = (p.price?.lowestOffer || 0) / 100;
           const originalPrice = p.price?.market
@@ -92,7 +103,7 @@ export class KinguinScraper implements GameScraper {
             price,
             originalPrice,
             currency: 'EUR',
-            productUrl: `https://www.kinguin.net/category/${urlKey}`,
+            productUrl: `https://www.kinguin.net/category/${p.externalId}/${urlKey}`,
             gameType,
             imageUrl: p.coverImageUrl || p.hiImageUrl || p.imageUrl || '',
             backgroundUrl: '',

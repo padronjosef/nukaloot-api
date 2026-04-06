@@ -4,7 +4,7 @@ import { CheapSharkScraper } from './providers/cheapshark.scraper';
 import { InstantGamingScraper } from './providers/instantgaming.scraper';
 import { EnebaScraper } from './providers/eneba.scraper';
 import { G2AScraper } from './providers/g2a.scraper';
-import { CDKeysScraper } from './providers/cdkeys.scraper';
+import { LoadedScraper } from './providers/loaded.scraper';
 import { KinguinScraper } from './providers/kinguin.scraper';
 import { GameType, ScrapedPrice } from './interfaces/scraper.interface';
 import { standardizeName } from '../games/games.service';
@@ -173,7 +173,7 @@ export class ScrapersService {
     private readonly instantGaming: InstantGamingScraper,
     private readonly eneba: EnebaScraper,
     private readonly g2a: G2AScraper,
-    private readonly cdkeys: CDKeysScraper,
+    private readonly loaded: LoadedScraper,
     private readonly kinguin: KinguinScraper,
   ) {}
 
@@ -197,10 +197,12 @@ export class ScrapersService {
     const results = await Promise.allSettled([
       this.steam.search(query, 'us'),
       this.cheapShark.search(query),
+      this.kinguin.search(query),
     ]);
 
     let steamPrices: ScrapedPrice[] = [];
     let cheapSharkPrices: ScrapedPrice[] = [];
+    let kinguinPrices: ScrapedPrice[] = [];
 
     if (results[0].status === 'fulfilled') {
       steamPrices = results[0].value;
@@ -237,6 +239,17 @@ export class ScrapersService {
       }
     }
 
+    if (results[2].status === 'fulfilled') {
+      kinguinPrices = results[2].value;
+    } else {
+      const reason =
+        results[2].reason instanceof Error
+          ? results[2].reason.message
+          : 'Unknown error';
+      this.logger.warn(`Kinguin scraper failed: ${reason}`);
+      errors.push({ store: 'Kinguin', reason });
+    }
+
     // Build Steam index (source of truth)
     const steamIndex: SteamIndex = { map: new Map() };
     for (const sp of steamPrices) {
@@ -250,13 +263,14 @@ export class ScrapersService {
       });
     }
 
-    // Enrich CheapShark with Steam data
+    // Enrich CheapShark and Kinguin with Steam data
     const matchedCheapShark = this.enrichWithSteamData(
       cheapSharkPrices,
       steamIndex,
     );
+    const matchedKinguin = this.enrichWithSteamData(kinguinPrices, steamIndex);
 
-    const prices = [...steamPrices, ...matchedCheapShark];
+    const prices = [...steamPrices, ...matchedCheapShark, ...matchedKinguin];
     return { prices: this.deduplicateAndSort(prices), steamIndex, errors };
   }
 
@@ -277,8 +291,7 @@ export class ScrapersService {
       { name: 'Instant Gaming', scraper: this.instantGaming },
       { name: 'Eneba', scraper: this.eneba },
       { name: 'G2A', scraper: this.g2a },
-      { name: 'CDKeys', scraper: this.cdkeys },
-      { name: 'Kinguin', scraper: this.kinguin },
+      { name: 'Loaded', scraper: this.loaded },
     ];
 
     type SlowEvent =
@@ -430,12 +443,36 @@ export class ScrapersService {
     return this.deduplicateAndSort(matched);
   }
 
+  private isInvalidUrl(url: string): boolean {
+    if (!url || typeof url !== 'string') return true;
+    const lower = url.toLowerCase();
+    // Reject URLs containing 404/not-found indicators
+    if (/\b404\b/.test(lower)) return true;
+    if (lower.includes('not-found') || lower.includes('notfound')) return true;
+    if (lower.includes('/error') || lower.includes('/page-not-found'))
+      return true;
+    // Must be a valid HTTP(S) URL
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol !== 'http:' && parsed.protocol !== 'https:';
+    } catch {
+      return true;
+    }
+  }
+
   private deduplicateAndSort(prices: ScrapedPrice[]): ScrapedPrice[] {
     const bestByStore = new Map<string, ScrapedPrice>();
     for (const p of prices) {
       p.gameName = standardizeName(p.gameName);
       // Skip console-only listings
       if (isConsoleListing(p.gameName)) continue;
+      // Skip results with invalid product URLs
+      if (this.isInvalidUrl(p.productUrl)) {
+        this.logger.warn(
+          `Filtered out ${p.storeName} result: invalid URL "${p.productUrl}"`,
+        );
+        continue;
+      }
       const key = `${p.storeName}:${dedupeNormalize(p.gameName)}`;
       const existing = bestByStore.get(key);
       if (!existing || p.price < existing.price) {
