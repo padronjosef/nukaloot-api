@@ -179,6 +179,59 @@ export class GamesController {
     return result;
   }
 
+  @Get('upcoming')
+  async upcoming() {
+    const cached = getCached<{
+      items: { name: string; appId: number; image: string; url: string }[];
+      rateLimited?: boolean;
+    }>('upcoming');
+    if (cached) return cached;
+
+    let data: SteamFeaturedCategoriesResponse;
+    try {
+      const res = await firstValueFrom(
+        this.http.get<SteamFeaturedCategoriesResponse>(
+          'https://store.steampowered.com/api/featuredcategories/?cc=us&l=en',
+          { headers: { 'User-Agent': 'Mozilla/5.0' } },
+        ),
+      );
+      data = res.data;
+    } catch (e: unknown) {
+      const axiosErr = e as AxiosErrorLike;
+      const status = axiosErr?.response?.status;
+      if (status === 403 || status === 429) {
+        return { rateLimited: true, items: [] };
+      }
+      return { items: [] };
+    }
+
+    const comingSoon = data?.coming_soon?.items || [];
+    const newReleases = data?.new_releases?.items || [];
+    const seen = new Set<number>();
+
+    const candidates: {
+      name: string;
+      appId: number;
+      image: string;
+      url: string;
+    }[] = [];
+    for (const item of [...comingSoon, ...newReleases]) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      candidates.push({
+        name: standardizeName(item.name),
+        appId: item.id,
+        image: item.header_image,
+        url: `https://store.steampowered.com/app/${item.id}`,
+      });
+    }
+
+    const filtered = await filterNsfw(this.http, candidates);
+    const result = { items: filtered.slice(0, 12) };
+    setCache('upcoming', result);
+    return result;
+  }
+
   @Get('top-sellers')
   async topSellers() {
     const cached = getCached<{

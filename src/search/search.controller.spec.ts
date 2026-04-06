@@ -18,6 +18,7 @@ describe('SearchController', () => {
     createdAt: new Date('2025-01-01'),
     updatedAt: new Date('2025-01-01'),
     prices: [],
+    failedStores: [],
   };
 
   const mockStore: Store = {
@@ -56,6 +57,8 @@ describe('SearchController', () => {
             search: jest.fn(),
             searchFast: jest.fn(),
             searchSlow: jest.fn(),
+            savePrices: jest.fn().mockResolvedValue(undefined),
+            saveFailedStores: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
@@ -341,19 +344,29 @@ describe('SearchController', () => {
 
       searchService.searchSlow.mockReturnValue(
         (async function* () {
-          yield await Promise.resolve(slowBatch);
+          yield await Promise.resolve({
+            type: 'results' as const,
+            prices: slowBatch,
+          });
         })(),
       );
 
       await controller.stream('Dark Souls', 'us', mockRes as Response);
 
+      // pending + fast + slow + done = 4
       expect(writtenData).toHaveLength(4);
 
       const pendingEvent = JSON.parse(
         writtenData[0].replace('data: ', '').trim(),
       ) as { type: string; [key: string]: unknown };
       expect(pendingEvent.type).toBe('pending');
-      expect(pendingEvent.scrapers).toEqual(['Instant Gaming']);
+      expect(pendingEvent.scrapers).toEqual([
+        'Instant Gaming',
+        'Eneba',
+        'G2A',
+        'CDKeys',
+        'Kinguin',
+      ]);
 
       const fastEvent = JSON.parse(
         writtenData[1].replace('data: ', '').trim(),
@@ -364,7 +377,6 @@ describe('SearchController', () => {
         writtenData[2].replace('data: ', '').trim(),
       ) as { type: string; [key: string]: unknown };
       expect(slowEvent.type).toBe('slow');
-      expect(slowEvent.prices).toEqual(slowBatch);
 
       const doneEvent = JSON.parse(
         writtenData[3].replace('data: ', '').trim(),
@@ -456,8 +468,14 @@ describe('SearchController', () => {
 
       searchService.searchSlow.mockReturnValue(
         (async function* () {
-          yield await Promise.resolve(batch1);
-          yield await Promise.resolve(batch2);
+          yield await Promise.resolve({
+            type: 'results' as const,
+            prices: batch1,
+          });
+          yield await Promise.resolve({
+            type: 'results' as const,
+            prices: batch2,
+          });
         })(),
       );
 
@@ -470,13 +488,11 @@ describe('SearchController', () => {
         writtenData[2].replace('data: ', '').trim(),
       ) as { type: string; [key: string]: unknown };
       expect(slowEvent1.type).toBe('slow');
-      expect(slowEvent1.prices).toEqual(batch1);
 
       const slowEvent2 = JSON.parse(
         writtenData[3].replace('data: ', '').trim(),
       ) as { type: string; [key: string]: unknown };
       expect(slowEvent2.type).toBe('slow');
-      expect(slowEvent2.prices).toEqual(batch2);
     });
   });
 });

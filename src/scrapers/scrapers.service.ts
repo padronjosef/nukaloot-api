@@ -305,7 +305,7 @@ export class ScrapersService {
     for (const { name, scraper } of slowScrapers) {
       push({ type: 'scraping-start', store: name });
 
-      (async () => {
+      void (async () => {
         try {
           this.logger.log(`Slow scraping: ${name}...`);
           const results = await scraper.search(query);

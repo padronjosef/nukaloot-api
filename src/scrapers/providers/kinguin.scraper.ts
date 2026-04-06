@@ -23,6 +23,12 @@ interface KinguinProduct {
   };
 }
 
+interface KinguinResponse {
+  _embedded?: {
+    products?: KinguinProduct[];
+  };
+}
+
 @Injectable()
 export class KinguinScraper implements GameScraper {
   readonly storeName = 'Kinguin';
@@ -44,7 +50,7 @@ export class KinguinScraper implements GameScraper {
         return [];
       }
 
-      const data = await res.json();
+      const data = (await res.json()) as KinguinResponse;
       const products: KinguinProduct[] = data?._embedded?.products || [];
 
       return products

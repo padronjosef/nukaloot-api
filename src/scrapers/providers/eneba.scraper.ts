@@ -14,6 +14,10 @@ interface AlgoliaHit {
   productType?: string;
 }
 
+interface AlgoliaResponse {
+  results?: Array<{ hits?: AlgoliaHit[] }>;
+}
+
 @Injectable()
 export class EnebaScraper implements GameScraper {
   readonly storeName = 'Eneba';
@@ -44,7 +48,7 @@ export class EnebaScraper implements GameScraper {
         return [];
       }
 
-      const data = await res.json();
+      const data = (await res.json()) as AlgoliaResponse;
       const hits: AlgoliaHit[] = data?.results?.[0]?.hits || [];
 
       return hits

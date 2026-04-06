@@ -147,18 +147,18 @@ describe('CheapSharkScraper', () => {
         ['3', 'GreenManGaming'],
         ['7', 'GOG'],
         ['8', 'Origin'],
-        ['11', 'Humble Store'],
+        ['11', 'Humble Bundle'],
         ['13', 'Uplay'],
         ['15', 'Fanatical'],
         ['21', 'WinGameStore'],
         ['23', 'GameBillet'],
         ['24', 'Voidu'],
-        ['25', 'Epic Games Store'],
+        ['25', 'Epic Games'],
         ['27', 'Games Planet'],
         ['28', 'Gamesload'],
         ['29', '2Game'],
         ['30', 'IndieGala'],
-        ['31', 'Blizzard Shop'],
+        ['31', 'Blizzard'],
         ['33', 'DLGamer'],
         ['34', 'Noctre'],
         ['35', 'DreamGame'],
@@ -209,7 +209,7 @@ describe('CheapSharkScraper', () => {
       expect(result).toHaveLength(3);
       expect(result[0].storeName).toBe('Steam');
       expect(result[1].storeName).toBe('GOG');
-      expect(result[2].storeName).toBe('Epic Games Store');
+      expect(result[2].storeName).toBe('Epic Games');
     });
 
     it('should return empty array on API failure', async () => {

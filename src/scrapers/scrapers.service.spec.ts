@@ -2,6 +2,10 @@ import { ScrapersService, SteamIndex } from './scrapers.service';
 import { SteamScraper } from './providers/steam.scraper';
 import { CheapSharkScraper } from './providers/cheapshark.scraper';
 import { InstantGamingScraper } from './providers/instantgaming.scraper';
+import { EnebaScraper } from './providers/eneba.scraper';
+import { G2AScraper } from './providers/g2a.scraper';
+import { CDKeysScraper } from './providers/cdkeys.scraper';
+import { KinguinScraper } from './providers/kinguin.scraper';
 import { ScrapedPrice } from './interfaces/scraper.interface';
 
 function makePrice(overrides: Partial<ScrapedPrice> = {}): ScrapedPrice {
@@ -26,6 +30,10 @@ describe('ScrapersService', () => {
   let steamScraper: { search: jest.Mock; storeName: string };
   let cheapSharkScraper: { search: jest.Mock; storeName: string };
   let instantGamingScraper: { search: jest.Mock; storeName: string };
+  let enebaScraper: { search: jest.Mock; storeName: string };
+  let g2aScraper: { search: jest.Mock; storeName: string };
+  let cdkeysScraper: { search: jest.Mock; storeName: string };
+  let kinguinScraper: { search: jest.Mock; storeName: string };
 
   beforeEach(() => {
     steamScraper = {
@@ -40,11 +48,31 @@ describe('ScrapersService', () => {
       search: jest.fn().mockResolvedValue([]),
       storeName: 'Instant Gaming',
     };
+    enebaScraper = {
+      search: jest.fn().mockResolvedValue([]),
+      storeName: 'Eneba',
+    };
+    g2aScraper = {
+      search: jest.fn().mockResolvedValue([]),
+      storeName: 'G2A',
+    };
+    cdkeysScraper = {
+      search: jest.fn().mockResolvedValue([]),
+      storeName: 'CDKeys',
+    };
+    kinguinScraper = {
+      search: jest.fn().mockResolvedValue([]),
+      storeName: 'Kinguin',
+    };
 
     service = new ScrapersService(
       steamScraper as unknown as SteamScraper,
       cheapSharkScraper as unknown as CheapSharkScraper,
       instantGamingScraper as unknown as InstantGamingScraper,
+      enebaScraper as unknown as EnebaScraper,
+      g2aScraper as unknown as G2AScraper,
+      cdkeysScraper as unknown as CDKeysScraper,
+      kinguinScraper as unknown as KinguinScraper,
     );
   });
 
@@ -197,25 +225,29 @@ describe('ScrapersService', () => {
       ]);
 
       const steamIndex: SteamIndex = { map: new Map() };
-      const results: ScrapedPrice[][] = [];
-      for await (const batch of service.searchSlow('game', steamIndex)) {
-        results.push(batch);
+      const resultEvents: ScrapedPrice[][] = [];
+      for await (const event of service.searchSlow('game', steamIndex)) {
+        if (event.type === 'results') {
+          resultEvents.push(event.prices);
+        }
       }
 
-      expect(results).toHaveLength(1);
-      expect(results[0].length).toBeGreaterThanOrEqual(1);
+      expect(resultEvents).toHaveLength(1);
+      expect(resultEvents[0].length).toBeGreaterThanOrEqual(1);
     });
 
-    it('should not yield when scraper returns empty array', async () => {
+    it('should not yield results when scraper returns empty array', async () => {
       instantGamingScraper.search.mockResolvedValue([]);
 
       const steamIndex: SteamIndex = { map: new Map() };
-      const results: ScrapedPrice[][] = [];
-      for await (const batch of service.searchSlow('game', steamIndex)) {
-        results.push(batch);
+      const resultEvents: ScrapedPrice[][] = [];
+      for await (const event of service.searchSlow('game', steamIndex)) {
+        if (event.type === 'results') {
+          resultEvents.push(event.prices);
+        }
       }
 
-      expect(results).toHaveLength(0);
+      expect(resultEvents).toHaveLength(0);
     });
 
     it('should handle scraper failure gracefully', async () => {
@@ -224,12 +256,14 @@ describe('ScrapersService', () => {
       );
 
       const steamIndex: SteamIndex = { map: new Map() };
-      const results: ScrapedPrice[][] = [];
-      for await (const batch of service.searchSlow('game', steamIndex)) {
-        results.push(batch);
+      const resultEvents: ScrapedPrice[][] = [];
+      for await (const event of service.searchSlow('game', steamIndex)) {
+        if (event.type === 'results') {
+          resultEvents.push(event.prices);
+        }
       }
 
-      expect(results).toHaveLength(0);
+      expect(resultEvents).toHaveLength(0);
     });
 
     it('should enrich results with steam data', async () => {
@@ -257,14 +291,16 @@ describe('ScrapersService', () => {
         ]),
       };
 
-      const results: ScrapedPrice[][] = [];
-      for await (const batch of service.searchSlow('dark souls', steamIndex)) {
-        results.push(batch);
+      const resultEvents: ScrapedPrice[][] = [];
+      for await (const event of service.searchSlow('dark souls', steamIndex)) {
+        if (event.type === 'results') {
+          resultEvents.push(event.prices);
+        }
       }
 
-      expect(results).toHaveLength(1);
-      expect(results[0][0].gameType).toBe('game');
-      expect(results[0][0].imageUrl).toBe('https://img/ds3.jpg');
+      expect(resultEvents).toHaveLength(1);
+      expect(resultEvents[0][0].gameType).toBe('game');
+      expect(resultEvents[0][0].imageUrl).toBe('https://img/ds3.jpg');
     });
   });
 

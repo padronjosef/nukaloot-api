@@ -2,6 +2,27 @@ import { Injectable, Logger } from '@nestjs/common';
 import { chromium, type Browser } from 'playwright';
 import { GameScraper, ScrapedPrice } from '../interfaces/scraper.interface';
 
+interface G2AItem {
+  name?: string;
+  title?: string;
+  minPrice?: number;
+  price?: number | string;
+  lowestPrice?: number;
+  slug?: string;
+  url?: string;
+  image?: string;
+  smallImage?: string;
+}
+
+interface G2AApiResponse {
+  data?: {
+    items?: G2AItem[];
+    products?: G2AItem[];
+  };
+  items?: G2AItem[];
+  products?: G2AItem[];
+}
+
 @Injectable()
 export class G2AScraper implements GameScraper {
   readonly storeName = 'G2A';
@@ -47,16 +68,18 @@ export class G2AScraper implements GameScraper {
             url.includes('/marketplace/product/') ||
             url.includes('/search/api')
           ) {
-            const json = await response.json().catch(() => null);
-            const items =
+            const json = (await response
+              .json()
+              .catch(() => null)) as G2AApiResponse | null;
+            const items: G2AItem[] =
               json?.data?.items ||
               json?.data?.products ||
               json?.items ||
               json?.products ||
               [];
             for (const item of items) {
-              const name = item.name || item.title || '';
-              const price =
+              const name: string = item.name || item.title || '';
+              const price: number | string =
                 item.minPrice || item.price || item.lowestPrice || 0;
               if (!name || !price) continue;
               apiResults.push({
