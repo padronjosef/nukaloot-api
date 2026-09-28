@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ScrapersService, SteamIndex } from '../scrapers/scrapers.service';
 import { GamesService } from '../games/games.service';
 import { PricesService } from '../prices/prices.service';
+import { matchesQuery } from '../scrapers/relevance';
 @Injectable()
 export class SearchService {
   private readonly logger = new Logger(SearchService.name);
@@ -12,10 +13,26 @@ export class SearchService {
     private readonly prices: PricesService,
   ) {}
 
+  /**
+   * Prices already in the cache were saved before the relevance rule existed,
+   * or under a looser one, so the same check runs on the way out. Otherwise a
+   * search poisoned once keeps answering with other games until the cache
+   * turns over.
+   */
+  private onlyThisGame<T extends { gameName: string }>(
+    query: string,
+    prices: T[],
+  ): T[] {
+    return prices.filter((p) => matchesQuery(query, p.gameName));
+  }
+
   async search(query: string, page: number, limit: number) {
     const game = await this.games.findOrCreate(query);
 
-    let allPrices = await this.prices.getCachedPrices(game.slug);
+    const cachedPrices = await this.prices.getCachedPrices(game.slug);
+    let allPrices = cachedPrices
+      ? this.onlyThisGame(query, cachedPrices)
+      : null;
 
     if (!allPrices) {
       this.logger.log(`Cache miss for "${query}", scraping...`);
@@ -46,10 +63,11 @@ export class SearchService {
 
     const cached = await this.prices.getCachedPrices(game.slug);
     if (cached) {
+      const relevant = this.onlyThisGame(query, cached);
       this.logger.log(
-        `Stream cache hit for "${query}" (${cached.length} prices)`,
+        `Stream cache hit for "${query}" (${relevant.length} of ${cached.length} prices)`,
       );
-      return { game, prices: cached, steamIndex: null };
+      return { game, prices: relevant, steamIndex: null };
     }
 
     this.logger.log(`Stream cache miss for "${query}", scraping...`);

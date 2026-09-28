@@ -4,9 +4,10 @@ import { SearchService } from './search.service';
 import { ScrapersModule } from '../scrapers/scrapers.module';
 import { GamesModule } from '../games/games.module';
 import { PricesModule } from '../prices/prices.module';
+import { AnalyticsModule } from '../analytics/analytics.module';
 
 @Module({
-  imports: [ScrapersModule, GamesModule, PricesModule],
+  imports: [ScrapersModule, GamesModule, PricesModule, AnalyticsModule],
   controllers: [SearchController],
   providers: [SearchService],
 })

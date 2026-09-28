@@ -37,7 +37,10 @@ export class EnebaScraper implements GameScraper {
             {
               indexName: 'products_global',
               query,
-              hitsPerPage: 40,
+              // Eneba answers with more than 40 for common titles — "dark
+              // souls 3" has 55 — and the cut was losing real listings before
+              // the relevance filter ever saw them.
+              hitsPerPage: 100,
             },
           ],
         }),

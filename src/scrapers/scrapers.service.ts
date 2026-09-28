@@ -8,6 +8,8 @@ import { LoadedScraper } from './providers/loaded.scraper';
 import { KinguinScraper } from './providers/kinguin.scraper';
 import { GameType, ScrapedPrice } from './interfaces/scraper.interface';
 import { standardizeName } from '../games/games.service';
+import { classifyListing, detectPlatform } from './platform';
+import { matchesQuery } from './relevance';
 
 function normalize(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -95,36 +97,6 @@ function dedupeNormalize(name: string): string {
     lower = lower.replace(new RegExp(`\\b${escaped}\\b`, 'gi'), '');
   }
   return lower.replace(/[^a-z0-9]/g, '');
-}
-
-/** Returns true if the listing is for a non-PC platform (Xbox, PlayStation, Nintendo) */
-function isConsoleListing(name: string): boolean {
-  const lower = name.toLowerCase();
-  const consolePatterns = [
-    /\bxbox\b/,
-    /\bplaystation\b/,
-    /\bps[45]\b/,
-    /\bnintendo\b/,
-    /\bswitch\b/,
-    /\bxbox live\b/,
-    /\bxbox one\b/,
-    /\bxbox series\b/,
-  ];
-  const pcPatterns = [
-    /\bsteam\b/,
-    /\bpc\b/,
-    /\bgog\b/,
-    /\bepic\b/,
-    /\buplay\b/,
-    /\bubisoft\b/,
-    /\borigin\b/,
-    /\bea app\b/,
-    /\bwindows\b/,
-  ];
-  const isConsole = consolePatterns.some((p) => p.test(lower));
-  const isPC = pcPatterns.some((p) => p.test(lower));
-  // If it mentions a console but NOT PC, filter it out
-  return isConsole && !isPC;
 }
 
 const BUNDLE_KEYWORDS = [
@@ -267,11 +239,20 @@ export class ScrapersService {
     const matchedCheapShark = this.enrichWithSteamData(
       cheapSharkPrices,
       steamIndex,
+      query,
     );
-    const matchedKinguin = this.enrichWithSteamData(kinguinPrices, steamIndex);
+    const matchedKinguin = this.enrichWithSteamData(
+      kinguinPrices,
+      steamIndex,
+      query,
+    );
 
     const prices = [...steamPrices, ...matchedCheapShark, ...matchedKinguin];
-    return { prices: this.deduplicateAndSort(prices), steamIndex, errors };
+    return {
+      prices: this.deduplicateAndSort(prices, query),
+      steamIndex,
+      errors,
+    };
   }
 
   /**
@@ -326,7 +307,11 @@ export class ScrapersService {
           if (results.length === 0) {
             push({ type: 'error', store: name, reason: 'No results found' });
           } else {
-            const enriched = this.enrichWithSteamData(results, steamIndex);
+            const enriched = this.enrichWithSteamData(
+              results,
+              steamIndex,
+              query,
+            );
             if (enriched.length > 0) {
               push({ type: 'results', prices: enriched });
             }
@@ -375,6 +360,7 @@ export class ScrapersService {
   private enrichWithSteamData(
     prices: ScrapedPrice[],
     steamIndex: SteamIndex,
+    query: string,
   ): ScrapedPrice[] {
     const matched: ScrapedPrice[] = [];
 
@@ -440,7 +426,7 @@ export class ScrapersService {
       }
     }
 
-    return this.deduplicateAndSort(matched);
+    return this.deduplicateAndSort(matched, query);
   }
 
   private isInvalidUrl(url: string): boolean {
@@ -460,12 +446,39 @@ export class ScrapersService {
     }
   }
 
-  private deduplicateAndSort(prices: ScrapedPrice[]): ScrapedPrice[] {
+  private deduplicateAndSort(
+    prices: ScrapedPrice[],
+    query: string,
+  ): ScrapedPrice[] {
     const bestByStore = new Map<string, ScrapedPrice>();
+    let offTopic = 0;
+    let ambiguous = 0;
+
     for (const p of prices) {
       p.gameName = standardizeName(p.gameName);
-      // Skip console-only listings
-      if (isConsoleListing(p.gameName)) continue;
+
+      // Store search endpoints answer with recommendations as well as
+      // matches, so a search for "dark souls 3" comes back carrying Lies of P
+      // and Death's Door. Checked against the name the card will show: if
+      // that name is not the game somebody typed, showing it is the bug.
+      if (!matchesQuery(query, p.gameName)) {
+        offTopic++;
+        continue;
+      }
+
+      // Console listings are kept and labelled rather than discarded, so the
+      // results can be filtered by platform instead of silently hiding half
+      // the market. What is still dropped is the ambiguous case — a title
+      // naming a console *and* PC, like "EA FC 25 PS5 & PC" — because a badge
+      // that guesses is worse than no listing: it is what makes somebody buy
+      // a key their machine cannot run.
+      const listing = classifyListing(p.gameName, p.productUrl);
+      if (listing === 'ambiguous') {
+        ambiguous++;
+        continue;
+      }
+      const platform = detectPlatform(p.gameName, p.productUrl);
+
       // Skip results with invalid product URLs
       if (this.isInvalidUrl(p.productUrl)) {
         this.logger.warn(
@@ -473,12 +486,27 @@ export class ScrapersService {
         );
         continue;
       }
-      const key = `${p.storeName}:${dedupeNormalize(p.gameName)}`;
+      // The platform belongs in the identity, not stripped out as noise.
+      const key = `${p.storeName}:${platform}:${dedupeNormalize(p.gameName)}`;
       const existing = bestByStore.get(key);
       if (!existing || p.price < existing.price) {
-        bestByStore.set(key, p);
+        bestByStore.set(key, { ...p, platform });
       }
     }
+    if (offTopic > 0) {
+      this.logger.log(
+        `Dropped ${offTopic} listing(s) that were not "${query}"`,
+      );
+    }
+    // Never silent: a title naming a console and PC at once is dropped rather
+    // than guessed at, and a store that suddenly writes every title that way
+    // would otherwise look like a store with no stock.
+    if (ambiguous > 0) {
+      this.logger.log(
+        `Dropped ${ambiguous} listing(s) naming a console and PC at once`,
+      );
+    }
+
     return Array.from(bestByStore.values()).sort((a, b) => a.price - b.price);
   }
 }

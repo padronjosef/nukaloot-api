@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { chromium, type Browser } from 'playwright';
+import { blockHeavyRequests } from './browser-page';
 import { GameScraper, ScrapedPrice } from '../interfaces/scraper.interface';
 
 @Injectable()
@@ -32,6 +33,7 @@ export class LoadedScraper implements GameScraper {
         userAgent:
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       });
+      await blockHeavyRequests(context);
       page = await context.newPage();
 
       const response = await page
@@ -129,7 +131,13 @@ export class LoadedScraper implements GameScraper {
       );
       return [];
     } finally {
-      if (page) await page.close().catch(() => {});
+      // The context, not just the page: an orphaned context keeps its
+      // renderer alive, which is how memory crept up until one crashed.
+      if (page)
+        await page
+          .context()
+          .close()
+          .catch(() => {});
     }
   }
 }

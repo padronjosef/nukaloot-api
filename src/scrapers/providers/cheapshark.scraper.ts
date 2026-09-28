@@ -7,6 +7,9 @@ import { GameScraper, ScrapedPrice } from '../interfaces/scraper.interface';
 // GamersGate, GreenManGaming, Humble, GOG, Fanatical, etc.
 // https://apidocs.cheapshark.com/
 
+/** Who we are, as CheapShark asks callers to say. */
+const CLIENT_USER_AGENT = 'Nukaloot/1.0 (+https://nukaloot.com)';
+
 interface CheapSharkDeal {
   title: string;
   salePrice: string;
@@ -59,6 +62,11 @@ export class CheapSharkScraper implements GameScraper {
               sortBy: 'Price',
               pageSize: 60,
             },
+            // CheapShark answers 400 to a generic or missing User-Agent and
+            // asks to be told who is calling. Without this the whole store
+            // list it covers — GOG, Fanatical, GreenManGaming and the rest —
+            // silently disappears from every search.
+            headers: { 'User-Agent': CLIENT_USER_AGENT },
           },
         ),
       );

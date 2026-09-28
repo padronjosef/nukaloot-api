@@ -2,13 +2,19 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { SearchController } from './search.controller';
 import { SearchService } from './search.service';
-import type { Response } from 'express';
+import { AnalyticsService } from '../analytics/analytics.service';
+import type { Request, Response } from 'express';
 import { Game, Price, Store } from '../entities';
 import { SteamIndex } from '../scrapers/scrapers.service';
 
 describe('SearchController', () => {
   let controller: SearchController;
   let searchService: jest.Mocked<SearchService>;
+
+  const mockReq = {
+    headers: {},
+    header: () => undefined,
+  } as unknown as Request;
 
   const mockGame: Game = {
     id: 'game-1',
@@ -61,6 +67,10 @@ describe('SearchController', () => {
             saveFailedStores: jest.fn().mockResolvedValue(undefined),
           },
         },
+        {
+          provide: AnalyticsService,
+          useValue: { recordSearch: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     }).compile();
 
@@ -73,26 +83,32 @@ describe('SearchController', () => {
   });
 
   describe('search', () => {
-    it('should throw BadRequestException when query is missing', () => {
-      expect(() => controller.search(undefined as unknown as string)).toThrow(
+    it('should throw BadRequestException when query is missing', async () => {
+      await expect(
+        controller.search(mockReq, undefined as unknown as string),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when query is empty string', async () => {
+      await expect(controller.search(mockReq, '')).rejects.toThrow(
         BadRequestException,
       );
     });
 
-    it('should throw BadRequestException when query is empty string', () => {
-      expect(() => controller.search('')).toThrow(BadRequestException);
+    it('should throw BadRequestException when query is too short (1 char)', async () => {
+      await expect(controller.search(mockReq, 'a')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
-    it('should throw BadRequestException when query is too short (1 char)', () => {
-      expect(() => controller.search('a')).toThrow(BadRequestException);
+    it('should throw BadRequestException when query is whitespace only', async () => {
+      await expect(controller.search(mockReq, '   ')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
-    it('should throw BadRequestException when query is whitespace only', () => {
-      expect(() => controller.search('   ')).toThrow(BadRequestException);
-    });
-
-    it('should throw BadRequestException with correct message', () => {
-      expect(() => controller.search('a')).toThrow(
+    it('should throw BadRequestException with correct message', async () => {
+      await expect(controller.search(mockReq, 'a')).rejects.toThrow(
         'Query parameter "q" is required (min 2 characters)',
       );
     });
@@ -104,7 +120,7 @@ describe('SearchController', () => {
         pagination: { page: 1, limit: 12, total: 1, totalPages: 1 },
       });
 
-      void controller.search('ds');
+      void controller.search(mockReq, 'ds');
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(searchService.search).toHaveBeenCalledWith('ds', 1, 12);
@@ -117,7 +133,7 @@ describe('SearchController', () => {
         pagination: { page: 1, limit: 12, total: 0, totalPages: 0 },
       });
 
-      void controller.search('Dark Souls');
+      void controller.search(mockReq, 'Dark Souls');
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(searchService.search).toHaveBeenCalledWith('Dark Souls', 1, 12);
@@ -130,7 +146,7 @@ describe('SearchController', () => {
         pagination: { page: 2, limit: 10, total: 0, totalPages: 0 },
       });
 
-      void controller.search('Dark Souls', '2', '10');
+      void controller.search(mockReq, 'Dark Souls', '2', '10');
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(searchService.search).toHaveBeenCalledWith('Dark Souls', 2, 10);
@@ -143,7 +159,7 @@ describe('SearchController', () => {
         pagination: { page: 1, limit: 12, total: 0, totalPages: 0 },
       });
 
-      void controller.search('Dark Souls', '0');
+      void controller.search(mockReq, 'Dark Souls', '0');
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(searchService.search).toHaveBeenCalledWith('Dark Souls', 1, 12);
@@ -156,7 +172,7 @@ describe('SearchController', () => {
         pagination: { page: 1, limit: 12, total: 0, totalPages: 0 },
       });
 
-      void controller.search('Dark Souls', '-5');
+      void controller.search(mockReq, 'Dark Souls', '-5');
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(searchService.search).toHaveBeenCalledWith('Dark Souls', 1, 12);
@@ -169,7 +185,7 @@ describe('SearchController', () => {
         pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
       });
 
-      void controller.search('Dark Souls', '1', '100');
+      void controller.search(mockReq, 'Dark Souls', '1', '100');
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(searchService.search).toHaveBeenCalledWith('Dark Souls', 1, 50);
@@ -182,7 +198,7 @@ describe('SearchController', () => {
         pagination: { page: 1, limit: 12, total: 0, totalPages: 0 },
       });
 
-      void controller.search('Dark Souls', '1', '0');
+      void controller.search(mockReq, 'Dark Souls', '1', '0');
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(searchService.search).toHaveBeenCalledWith('Dark Souls', 1, 12);
@@ -195,7 +211,7 @@ describe('SearchController', () => {
         pagination: { page: 1, limit: 12, total: 0, totalPages: 0 },
       });
 
-      void controller.search('Dark Souls', 'abc');
+      void controller.search(mockReq, 'Dark Souls', 'abc');
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(searchService.search).toHaveBeenCalledWith('Dark Souls', 1, 12);
@@ -208,7 +224,7 @@ describe('SearchController', () => {
         pagination: { page: 1, limit: 12, total: 0, totalPages: 0 },
       });
 
-      void controller.search('Dark Souls', '1', 'abc');
+      void controller.search(mockReq, 'Dark Souls', '1', 'abc');
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(searchService.search).toHaveBeenCalledWith('Dark Souls', 1, 12);
@@ -221,7 +237,7 @@ describe('SearchController', () => {
         pagination: { page: 1, limit: 12, total: 0, totalPages: 0 },
       });
 
-      void controller.search('  Dark Souls  ');
+      void controller.search(mockReq, '  Dark Souls  ');
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(searchService.search).toHaveBeenCalledWith('Dark Souls', 1, 12);
@@ -248,6 +264,7 @@ describe('SearchController', () => {
     it('should throw BadRequestException when query is missing', async () => {
       await expect(
         controller.stream(
+          mockReq,
           undefined as unknown as string,
           'us',
           mockRes as Response,
@@ -257,7 +274,7 @@ describe('SearchController', () => {
 
     it('should throw BadRequestException when query is too short', async () => {
       await expect(
-        controller.stream('a', 'us', mockRes as Response),
+        controller.stream(mockReq, 'a', 'us', mockRes as Response),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -268,7 +285,7 @@ describe('SearchController', () => {
         steamIndex: null,
       });
 
-      await controller.stream('Dark Souls', 'us', mockRes as Response);
+      await controller.stream(mockReq, 'Dark Souls', 'us', mockRes as Response);
 
       expect(mockRes.setHeader).toHaveBeenCalledWith(
         'Content-Type',
@@ -300,7 +317,7 @@ describe('SearchController', () => {
         steamIndex: null,
       });
 
-      await controller.stream('Dark Souls', 'us', mockRes as Response);
+      await controller.stream(mockReq, 'Dark Souls', 'us', mockRes as Response);
 
       expect(writtenData).toHaveLength(2);
 
@@ -351,7 +368,7 @@ describe('SearchController', () => {
         })(),
       );
 
-      await controller.stream('Dark Souls', 'us', mockRes as Response);
+      await controller.stream(mockReq, 'Dark Souls', 'us', mockRes as Response);
 
       // pending + fast + slow + done = 4
       expect(writtenData).toHaveLength(4);
@@ -393,6 +410,7 @@ describe('SearchController', () => {
       });
 
       await controller.stream(
+        mockReq,
         'Dark Souls',
         undefined as unknown as string,
         mockRes as Response,
@@ -409,7 +427,7 @@ describe('SearchController', () => {
         steamIndex: null,
       });
 
-      await controller.stream('Dark Souls', 'co', mockRes as Response);
+      await controller.stream(mockReq, 'Dark Souls', 'co', mockRes as Response);
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(searchService.searchFast).toHaveBeenCalledWith('Dark Souls', 'co');
@@ -422,7 +440,12 @@ describe('SearchController', () => {
         steamIndex: null,
       });
 
-      await controller.stream('  Dark Souls  ', 'us', mockRes as Response);
+      await controller.stream(
+        mockReq,
+        '  Dark Souls  ',
+        'us',
+        mockRes as Response,
+      );
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(searchService.searchFast).toHaveBeenCalledWith('Dark Souls', 'us');
@@ -478,7 +501,7 @@ describe('SearchController', () => {
         })(),
       );
 
-      await controller.stream('Dark Souls', 'us', mockRes as Response);
+      await controller.stream(mockReq, 'Dark Souls', 'us', mockRes as Response);
 
       // pending + fast + slow1 + slow2 + done = 5
       expect(writtenData).toHaveLength(5);

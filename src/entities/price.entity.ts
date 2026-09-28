@@ -31,6 +31,13 @@ export class Price {
   @Column({ default: 'other' })
   gameType: string;
 
+  /**
+   * pc / playstation / xbox / nintendo. Kept so a console key can never be
+   * offered as the cheapest option to somebody shopping for PC.
+   */
+  @Column({ type: 'varchar', length: 16, default: 'pc' })
+  platform: string;
+
   @Column({ default: '' })
   imageUrl: string;
 

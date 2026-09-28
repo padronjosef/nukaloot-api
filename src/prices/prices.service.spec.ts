@@ -13,6 +13,7 @@ function createMockRepository<T>(): MockRepository<T> {
     findOne: jest.fn(),
     create: jest.fn(),
     save: jest.fn(),
+    update: jest.fn().mockResolvedValue({ affected: 1 }),
   };
 }
 
@@ -79,6 +80,7 @@ describe('PricesService', () => {
           productUrl: 'https://store.steampowered.com/app/1',
           gameName: 'Dark Souls',
           gameType: 'game',
+          platform: 'pc',
           imageUrl: '',
           backgroundUrl: '',
           releaseDate: '',
@@ -144,6 +146,145 @@ describe('PricesService', () => {
         order: Record<string, string>;
       };
       expect(callArgs.order).toEqual({ price: 'ASC' });
+    });
+
+    /**
+     * Rows saved by an older pipeline are incomplete — console listings were
+     * thrown away at scrape time — so a cached set from before it reports a
+     * game as PC-only when it is not. The epoch forces one re-scrape instead
+     * of serving that until the daily boundary passes.
+     */
+    describe('the pipeline epoch', () => {
+      const cutoffOf = () => {
+        const args = (priceRepo.find!.mock.calls[0] as unknown[])[0] as {
+          where: { scrapedAt: { value: Date } };
+        };
+        return args.where.scrapedAt.value;
+      };
+
+      afterEach(() => {
+        delete process.env.PRICE_CACHE_EPOCH;
+      });
+
+      it('ignores prices older than the epoch', async () => {
+        process.env.PRICE_CACHE_EPOCH = '2099-01-01T00:00:00Z';
+        priceRepo.find!.mockResolvedValue([]);
+
+        await service.getCachedPrices('dark-souls');
+
+        expect(cutoffOf()).toEqual(new Date('2099-01-01T00:00:00Z'));
+      });
+
+      it('never lengthens the cache past the daily boundary', async () => {
+        // An epoch in the distant past must not resurrect prices the daily
+        // refresh has already retired.
+        process.env.PRICE_CACHE_EPOCH = '1990-01-01T00:00:00Z';
+        priceRepo.find!.mockResolvedValue([]);
+
+        await service.getCachedPrices('dark-souls');
+
+        expect(cutoffOf().getTime()).toBeGreaterThan(
+          new Date('1990-01-01T00:00:00Z').getTime(),
+        );
+      });
+
+      it.each([
+        ['not a date', 'whenever'],
+        ['empty', ''],
+        ['a number', '0'],
+      ])(
+        'falls back to the daily boundary when the epoch is %s',
+        async (_label, value) => {
+          // A typo here would otherwise invalidate every cached price and
+          // re-scrape every game on every search.
+          process.env.PRICE_CACHE_EPOCH = value;
+          priceRepo.find!.mockResolvedValue([]);
+
+          await service.getCachedPrices('dark-souls');
+
+          const cutoff = cutoffOf();
+          expect(Number.isNaN(cutoff.getTime())).toBe(false);
+          expect(cutoff.getUTCHours()).toBe(18);
+        },
+      );
+    });
+  });
+
+  describe('the game cover', () => {
+    /**
+     * A game is created from a search term and has no artwork, so every list
+     * that shows one draws a placeholder forever. The listings carry the
+     * image; the first one that has it lends it to the game.
+     */
+    const scraped = (over: Partial<ScrapedPrice> = {}): ScrapedPrice => ({
+      storeName: 'Steam',
+      storeUrl: 'https://store.steampowered.com',
+      price: 9.99,
+      currency: 'USD',
+      productUrl: 'https://store.steampowered.com/app/570',
+      gameName: 'Dark Souls',
+      gameType: 'game',
+      imageUrl: 'https://img.test/cover.jpg',
+      backgroundUrl: '',
+      releaseDate: '',
+      ...over,
+    });
+
+    beforeEach(() => {
+      storeRepo.findOne!.mockResolvedValue(mockStore);
+      priceRepo.findOne!.mockResolvedValue(null);
+      priceRepo.create!.mockImplementation((v: unknown) => v);
+      priceRepo.save!.mockImplementation((v: unknown) => Promise.resolve(v));
+    });
+
+    it('borrows the first image it is given', async () => {
+      const game = { ...mockGame, coverUrl: '' };
+      await service.savePrices(game, [scraped()]);
+
+      expect(game.coverUrl).toBe('https://img.test/cover.jpg');
+    });
+
+    it('does not overwrite a cover the game already has', async () => {
+      // Whatever is there was chosen once; a later scrape must not churn it.
+      const game = { ...mockGame, coverUrl: 'https://img.test/kept.jpg' };
+      await service.savePrices(game, [scraped()]);
+
+      expect(game.coverUrl).toBe('https://img.test/kept.jpg');
+    });
+
+    it('skips listings with no image rather than storing an empty one', async () => {
+      // An empty string would count as "has a cover" and lock the placeholder
+      // in forever.
+      const game = { ...mockGame, coverUrl: '' };
+      await service.savePrices(game, [
+        scraped({ imageUrl: '', productUrl: 'https://a.test/1' }),
+        scraped({
+          imageUrl: 'https://img.test/second.jpg',
+          productUrl: 'https://a.test/2',
+        }),
+      ]);
+
+      expect(game.coverUrl).toBe('https://img.test/second.jpg');
+    });
+
+    it('leaves the game alone when no listing has an image', async () => {
+      const game = { ...mockGame, coverUrl: '' };
+      await service.savePrices(game, [scraped({ imageUrl: '' })]);
+
+      expect(game.coverUrl).toBe('');
+    });
+
+    it('still returns the prices when saving the cover fails', async () => {
+      // The prices are the answer; the picture is decoration, and a write
+      // that fails must not take the search down with it.
+      const game = { ...mockGame, coverUrl: '' };
+      (
+        service as unknown as { gameRepo: { update: jest.Mock } }
+      ).gameRepo.update.mockRejectedValue(new Error('db down'));
+
+      await expect(service.savePrices(game, [scraped()])).resolves.toHaveLength(
+        1,
+      );
     });
   });
 
@@ -225,6 +366,7 @@ describe('PricesService', () => {
         productUrl: 'https://store.steampowered.com/app/570',
         gameName: 'Dark Souls',
         gameType: 'game',
+        platform: 'pc',
         imageUrl: 'https://img.com/1.jpg',
         backgroundUrl: 'https://img.com/bg1.jpg',
         releaseDate: '2011-09-22',
@@ -333,39 +475,54 @@ describe('PricesService', () => {
       expect(priceRepo.save).toHaveBeenCalledTimes(2);
     });
 
-    it('should return fresh prices from DB after saving', async () => {
-      const savedPrices: Price[] = [
-        {
-          id: 'p1',
-          price: 9.99,
-          originalPrice: 19.99,
-          currency: 'USD',
-          productUrl: 'https://store.steampowered.com/app/570',
-          gameName: 'Dark Souls',
-          gameType: 'game',
-          imageUrl: '',
-          backgroundUrl: '',
-          releaseDate: '',
-          scrapedAt: new Date(),
-          game: mockGame,
-          store: mockStore,
-        },
-      ];
-
+    it('returns what it just saved, cheapest first', async () => {
       storeRepo.findOne!.mockResolvedValue(mockStore);
       priceRepo.findOne!.mockResolvedValue(null);
-      priceRepo.create!.mockReturnValue({});
-      priceRepo.save!.mockResolvedValue({});
-      priceRepo.find!.mockResolvedValue(savedPrices);
+      priceRepo.create!.mockImplementation((v: unknown) => v);
+      priceRepo.save!.mockImplementation((v: unknown) => Promise.resolve(v));
+
+      const result = await service.savePrices(mockGame, [
+        { ...scrapedPrice, price: 30, productUrl: 'https://a.test/1' },
+        { ...scrapedPrice, price: 10, productUrl: 'https://a.test/2' },
+      ]);
+
+      expect(result.map((p) => p.price)).toEqual([10, 30]);
+    });
+
+    it('does not hand back rows from older scrapes', async () => {
+      // It used to re-read every price attached to the game, which put back
+      // the listings an older, looser pipeline had saved — other games
+      // entirely, and PC-only rows from before platforms existed — right
+      // after the filtering that removed them.
+      storeRepo.findOne!.mockResolvedValue(mockStore);
+      priceRepo.findOne!.mockResolvedValue(null);
+      priceRepo.create!.mockImplementation((v: unknown) => v);
+      priceRepo.save!.mockImplementation((v: unknown) => Promise.resolve(v));
+      priceRepo.find!.mockResolvedValue([
+        { id: 'stale', gameName: 'Lies Of P', price: 1 } as Price,
+      ]);
 
       const result = await service.savePrices(mockGame, [scrapedPrice]);
 
-      expect(result).toEqual(savedPrices);
-      expect(priceRepo.find).toHaveBeenCalledWith({
-        where: { game: { id: 'game-1' } },
-        relations: ['store', 'game'],
-        order: { price: 'ASC' },
-      });
+      expect(result.map((p) => p.gameName)).toEqual(['Dark Souls']);
+      expect(priceRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('returns an updated row, not only the newly created ones', async () => {
+      // A price that already existed is the common case on a re-scrape; if
+      // only new rows came back the page would lose most of its results.
+      storeRepo.findOne!.mockResolvedValue(mockStore);
+      priceRepo.findOne!.mockResolvedValue({
+        id: 'existing',
+        gameName: 'Old Name',
+      } as Price);
+      priceRepo.save!.mockImplementation((v: unknown) => Promise.resolve(v));
+
+      const result = await service.savePrices(mockGame, [scrapedPrice]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].gameName).toBe('Dark Souls');
+      expect(priceRepo.create).not.toHaveBeenCalled();
     });
 
     it('should handle empty scraped prices array', async () => {

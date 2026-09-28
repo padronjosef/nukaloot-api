@@ -46,8 +46,28 @@ describe('CheapSharkScraper', () => {
       await scraper.search('dark souls');
       expect(httpService.get).toHaveBeenCalledWith(
         'https://www.cheapshark.com/api/1.0/deals',
-        { params: { title: 'dark souls', sortBy: 'Price', pageSize: 60 } },
+        expect.objectContaining({
+          params: { title: 'dark souls', sortBy: 'Price', pageSize: 60 },
+        }),
       );
+    });
+
+    it('always says who is calling', async () => {
+      // CheapShark answers 400 to a missing or generic User-Agent, and it
+      // fronts GOG, Fanatical, GreenManGaming and the rest — so dropping this
+      // header takes a dozen stores out of every search at once, silently.
+      httpService.get.mockReturnValue(of(axiosResponse([])));
+      await scraper.search('dark souls');
+
+      const [, options] = httpService.get.mock.calls[0] as [
+        string,
+        { headers?: Record<string, string> },
+      ];
+      const agent = options.headers?.['User-Agent'] ?? '';
+
+      expect(agent).toContain('Nukaloot');
+      // "Generic" is what they refuse, so it has to carry a way to reach us.
+      expect(agent).toMatch(/https?:\/\//);
     });
 
     it('should return empty array when no deals found', async () => {

@@ -567,6 +567,150 @@ describe('ScrapersService', () => {
     });
   });
 
+  /**
+   * The rule itself is unit-tested in relevance.spec.ts. What these prove is
+   * that it is wired into the path every result goes through — a filter
+   * nobody calls leaves the page looking exactly as broken as before.
+   */
+  describe('relevance (tested via searchFast)', () => {
+    const names = (prices: ScrapedPrice[]) => prices.map((p) => p.gameName);
+
+    it('drops what the store recommended and keeps what was asked for', async () => {
+      cheapSharkScraper.search.mockResolvedValue([
+        makePrice({ storeName: 'A', gameName: 'Dark Souls 3', price: 30 }),
+        makePrice({ storeName: 'B', gameName: 'Lies Of P', price: 12 }),
+        makePrice({ storeName: 'C', gameName: "Death's Door", price: 8 }),
+        makePrice({ storeName: 'D', gameName: 'Darksiders III', price: 6 }),
+        makePrice({
+          storeName: 'E',
+          gameName: 'Dark Souls III: The Fire Fades Edition',
+          price: 40,
+        }),
+      ]);
+
+      const { prices } = await service.searchFast('dark souls 3');
+
+      expect(names(prices).sort()).toEqual([
+        'Dark Souls 3',
+        'Dark Souls Iii: The Fire Fades Edition',
+      ]);
+    });
+
+    it('does not keep a cheaper wrong game just because it is cheaper', async () => {
+      // Results are sorted by price, so anything off-topic that survived
+      // would be sitting at the very top of the page.
+      cheapSharkScraper.search.mockResolvedValue([
+        makePrice({ storeName: 'A', gameName: 'Lies Of P', price: 3 }),
+        makePrice({ storeName: 'B', gameName: 'Dark Souls 3', price: 50 }),
+      ]);
+
+      const { prices } = await service.searchFast('dark souls 3');
+
+      expect(names(prices)).toEqual(['Dark Souls 3']);
+    });
+
+    it('filters what Steam itself returns, not only the other stores', async () => {
+      steamScraper.search.mockResolvedValue([
+        makePrice({ storeName: 'Steam', gameName: 'Elden Ring', price: 40 }),
+        makePrice({ storeName: 'Steam', gameName: 'Nioh 2', price: 20 }),
+      ]);
+
+      const { prices } = await service.searchFast('elden ring');
+
+      expect(names(prices)).toEqual(['Elden Ring']);
+    });
+
+    it('returns nothing rather than the wrong game when nothing matches', async () => {
+      // An empty result is a true answer. "Here is what the store suggested
+      // instead" is the behaviour being removed.
+      cheapSharkScraper.search.mockResolvedValue([
+        makePrice({ storeName: 'A', gameName: 'Lies Of P' }),
+        makePrice({ storeName: 'B', gameName: 'Nioh 2' }),
+      ]);
+
+      const { prices } = await service.searchFast('dark souls 3');
+
+      expect(prices).toEqual([]);
+    });
+
+    it('keeps every edition and repack of the right game', async () => {
+      cheapSharkScraper.search.mockResolvedValue([
+        makePrice({
+          storeName: 'A',
+          gameName: 'Metal Gear Solid V: The Phantom Pain',
+          price: 20,
+        }),
+        makePrice({
+          storeName: 'B',
+          gameName: 'Metal Gear Solid V: The Definitive Experience',
+          price: 25,
+        }),
+        makePrice({
+          storeName: 'C',
+          gameName: 'Metal Gear Solid V Repack',
+          price: 18,
+        }),
+        makePrice({
+          storeName: 'D',
+          gameName: 'Metal Gear Rising: Revengeance',
+          price: 5,
+        }),
+      ]);
+
+      const { prices } = await service.searchFast('metal gear solid v');
+
+      expect(names(prices)).not.toContain('Metal Gear Rising: Revengeance');
+      expect(prices).toHaveLength(3);
+    });
+
+    it('still drops the ambiguous console-and-PC listing', async () => {
+      // The platform rule and the relevance rule both have to keep working;
+      // adding one must not quietly disable the other.
+      cheapSharkScraper.search.mockResolvedValue([
+        makePrice({ storeName: 'A', gameName: 'EA FC 25 PS5 & PC', price: 30 }),
+        makePrice({ storeName: 'B', gameName: 'EA FC 25', price: 40 }),
+      ]);
+
+      const { prices } = await service.searchFast('ea fc 25');
+
+      expect(names(prices)).toEqual(['Ea Fc 25']);
+    });
+
+    it('keeps a console listing of the game that was asked for, labelled', async () => {
+      cheapSharkScraper.search.mockResolvedValue([
+        makePrice({
+          storeName: 'A',
+          gameName: 'God Of War Ragnarok (PS5)',
+          price: 21.93,
+        }),
+        makePrice({
+          storeName: 'B',
+          gameName: 'God Of War Ragnarok',
+          price: 26.99,
+        }),
+        makePrice({ storeName: 'C', gameName: 'God Of War', price: 10 }),
+      ]);
+
+      const { prices } = await service.searchFast('god of war ragnarok');
+
+      expect(prices.map((p) => [p.gameName, p.platform])).toEqual([
+        ['God Of War Ragnarok (Ps5)', 'playstation'],
+        ['God Of War Ragnarok', 'pc'],
+      ]);
+    });
+
+    it('keeps everything when the query has no words to match on', async () => {
+      cheapSharkScraper.search.mockResolvedValue([
+        makePrice({ storeName: 'A', gameName: 'Anything' }),
+        makePrice({ storeName: 'B', gameName: 'Else' }),
+      ]);
+
+      const { prices } = await service.searchFast('!!!');
+
+      expect(prices).toHaveLength(2);
+    });
+  });
+
   describe('searchAll', () => {
     it('should delegate to searchFast and return prices', async () => {
       steamScraper.search.mockResolvedValue([

@@ -2,18 +2,25 @@ import {
   Controller,
   Get,
   Query,
+  Req,
   Res,
   BadRequestException,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { SearchService } from './search.service';
+import { AnalyticsService } from '../analytics/analytics.service';
+import { clientMetaFrom } from '../analytics/client-meta';
 
 @Controller('search')
 export class SearchController {
-  constructor(private readonly searchService: SearchService) {}
+  constructor(
+    private readonly searchService: SearchService,
+    private readonly analytics: AnalyticsService,
+  ) {}
 
   @Get()
-  search(
+  async search(
+    @Req() req: Request,
     @Query('q') query: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -30,11 +37,24 @@ export class SearchController {
       Math.max(1, parseInt(limit || '12', 10) || 12),
     );
 
-    return this.searchService.search(query.trim(), pageNum, limitNum);
+    const result = await this.searchService.search(
+      query.trim(),
+      pageNum,
+      limitNum,
+    );
+
+    void this.analytics.recordSearch({
+      query: query.trim(),
+      resultCount: result.pagination.total,
+      client: clientMetaFrom(req),
+    });
+
+    return result;
   }
 
   @Get('stream')
   async stream(
+    @Req() req: Request,
     @Query('q') query: string,
     @Query('cc') cc: string,
     @Res() res: Response,
@@ -55,6 +75,14 @@ export class SearchController {
     const region = cc || 'us';
     const { game, prices, steamIndex, errors } =
       await this.searchService.searchFast(query.trim(), region);
+
+    void this.analytics.recordSearch({
+      query: query.trim(),
+      currencyRegion: region,
+      cacheHit: !steamIndex,
+      resultCount: prices?.length ?? 0,
+      client: clientMetaFrom(req),
+    });
 
     if (!steamIndex) {
       // Cache hit — send prices + saved failed stores
