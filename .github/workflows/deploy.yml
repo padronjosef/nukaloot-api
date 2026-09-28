@@ -3,6 +3,9 @@ name: Deploy API
 on:
   push:
     branches: [main]
+  # Redeploying without a commit: a failed deploy that needs nothing more
+  # than a fixed secret on the box should not need a fake commit to retry.
+  workflow_dispatch:
 
 permissions:
   contents: write
